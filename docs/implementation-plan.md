@@ -21,7 +21,7 @@ Acceptance: the standalone, PHP 8.1, and FreeScout-runtime smoke tests pass. See
 
 Acceptance: FreeScout discovers the module, MCP discovery advertises only tools, the tool catalogue is empty, legacy initialization is rejected, and the release archive contains production dependencies.
 
-## Phase 2 — per-user authentication
+## Phase 2 — per-user authentication (complete)
 
 - Add a migration and model for named MCP tokens linked to a FreeScout user.
 - Generate at least 256 bits of randomness; show plaintext once and store only a keyed hash plus a non-secret display prefix.
@@ -30,7 +30,7 @@ Acceptance: FreeScout discovers the module, MCP discovery advertises only tools,
 - Add an account UI for token creation/revocation and an administrator policy switch.
 - Add rate limiting and security-focused tests before enabling the endpoint in documentation.
 
-Acceptance: two users receive different permission contexts; copied database data cannot be used as a bearer token; revoked, expired, disabled-user, and malformed credentials fail closed.
+Acceptance: two users receive different authentication contexts; copied database data cannot be used as a bearer token; revoked, expired, disabled-user, robot-account, policy-blocked, and malformed credentials fail closed. The PHP 8.1 FreeScout integration test covers module routes, migration-backed issuance, HTTP authentication, one-way storage, and revocation.
 
 ## Phase 3 — permission-safe read tools
 

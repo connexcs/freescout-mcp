@@ -21,7 +21,10 @@
     "autoload": {
         "psr-4": {
             "Modules\\McpServer\\": ""
-        }
+        },
+        "exclude-from-classmap": [
+            "/Database/Migrations/"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

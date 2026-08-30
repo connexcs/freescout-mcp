@@ -27,7 +27,7 @@ final class McpServerFactory
         return Server::builder()
             ->setServerInfo(
                 (string) ($this->config['server_name'] ?? 'freescout-mcp'),
-                (string) ($this->config['server_version'] ?? '0.1.0'),
+                (string) ($this->config['server_version'] ?? '0.2.0'),
                 'Permission-aware FreeScout capabilities over MCP.',
                 null,
                 null,

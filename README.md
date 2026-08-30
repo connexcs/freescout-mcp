@@ -4,9 +4,9 @@ A native FreeScout module that exposes FreeScout capabilities through the Model 
 
 ## Current status
 
-Phases 0 and 1 are complete: the repository contains the compatibility decision record, a loadable FreeScout module skeleton, and a modern stateless HTTP MCP endpoint. The endpoint currently advertises an empty tool catalogue. Authentication, per-user tokens, permissions, audit logging, and functional tools intentionally begin in later phases.
+Phases 0 through 2 are complete: the repository contains the compatibility decision record, a loadable FreeScout module, a modern stateless HTTP MCP endpoint, and per-user bearer-token authentication. The endpoint currently advertises an empty tool catalogue. Permission-aware data tools and audit logging intentionally begin in later phases.
 
-The endpoint is disabled by default. Do not enable it on a public system until the authentication phase has landed.
+The endpoint is disabled by default. Once enabled, every POST requires a valid token belonging to an active, policy-eligible FreeScout user.
 
 ## Compatibility
 
@@ -55,7 +55,32 @@ MCP_SERVER_ALLOWED_HOSTS=support.example.com
 MCP_SERVER_ALLOWED_ORIGINS=https://example-client.test
 MCP_SERVER_MAX_BODY_BYTES=1048576
 MCP_SERVER_CATALOG_TTL_MS=300000
+MCP_SERVER_RATE_LIMIT=120
+MCP_SERVER_AUTH_RATE_LIMIT=30
 ```
+
+`MCP_SERVER_TOKEN_PEPPER` is optional and defaults to `APP_KEY`. If set, it must be a stable, secret value. Changing either the configured pepper or the fallback `APP_KEY` invalidates every existing MCP token.
+
+## Personal tokens
+
+1. Activate the module so FreeScout runs the `mcpserver_tokens` migration.
+2. As an administrator, open **Manage → Settings → MCP Server** to control personal-token availability, regular-user access, and the lifetime applied to new tokens.
+3. Open **Your Profile → MCP Tokens**, name a token, and copy the displayed value immediately. Only its keyed hash is stored.
+4. Set `MCP_SERVER_ENABLED=true` and clear FreeScout's configuration cache when ready.
+5. Configure the client to send `Authorization: Bearer <token>` to the displayed endpoint.
+
+Example stateless discovery request:
+
+```bash
+curl -sS https://support.example.com/mcp \
+  -H "Authorization: Bearer $FREESCOUT_MCP_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: server/discover' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+```
+
+Administrators can inspect token metadata and revoke individual or all tokens from a user's MCP Tokens page, but cannot recover token plaintext or create a token on another user's behalf. See [the security design](docs/security.md).
 
 ## Packaging
 
@@ -63,7 +88,7 @@ Run `scripts/build-release.sh`. It creates `build/McpServer-<version>.zip` conta
 
 ## Roadmap
 
-- Phase 2: per-user bearer tokens, hashed at rest, revocation, expiry, and administrative controls
+- Phase 2 (complete): per-user bearer tokens, keyed hashes at rest, revocation, expiry, rate limits, and administrative controls
 - Phase 3: read-only conversation, customer, mailbox, user, and optional Knowledge Base tools
 - Phase 4: permission-safe mutation tools with explicit confirmation semantics and audit logging
 - Phase 5: OAuth authorization for hosted clients, without treating FreeScout's existing OAuth client module as an authorization server

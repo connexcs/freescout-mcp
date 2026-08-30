@@ -9,6 +9,7 @@ use Mcp\Server\Transport\Http\Middleware\CorsMiddleware;
 use Mcp\Server\Transport\Http\Middleware\DnsRebindingProtectionMiddleware;
 use Mcp\Server\Transport\StatelessHttpTransport;
 use Modules\McpServer\Http\LaravelResponseFactory;
+use Modules\McpServer\Http\McpErrorResponseFactory;
 use Modules\McpServer\Http\Psr7RequestFactory;
 use Modules\McpServer\Services\McpServerFactory;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -18,21 +19,24 @@ final class McpController
     private $servers;
     private $requests;
     private $responses;
+    private $errors;
 
     public function __construct(
         McpServerFactory $servers,
         Psr7RequestFactory $requests,
-        LaravelResponseFactory $responses
+        LaravelResponseFactory $responses,
+        McpErrorResponseFactory $errors
     ) {
         $this->servers = $servers;
         $this->requests = $requests;
         $this->responses = $responses;
+        $this->errors = $errors;
     }
 
     public function handle(Request $request): Response
     {
         if (!config('mcpserver.enabled', false)) {
-            return new Response('MCP Server is disabled.', 503, ['Content-Type' => 'text/plain']);
+            return $this->errors->unavailable($request);
         }
 
         $factory = new Psr17Factory();
