@@ -1,0 +1,17 @@
+{
+    "name": "MCP Server",
+    "alias": "mcpserver",
+    "description": "Native Model Context Protocol capabilities for FreeScout.",
+    "version": "0.1.0",
+    "author": "FreeScout MCP contributors",
+    "requiredAppVersion": "1.8.237",
+    "requiredPhpExtensions": "fileinfo",
+    "providers": [
+        "Modules\\McpServer\\Providers\\McpServerServiceProvider"
+    ],
+    "aliases": {},
+    "files": [
+        "start.php"
+    ],
+    "requires": []
+}
