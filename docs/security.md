@@ -23,7 +23,7 @@ Every enabled MCP POST must supply exactly one `Authorization: Bearer` credentia
 - regular-user tokens are disabled and the owner is not an administrator;
 - the owner is disabled, deleted, or is a non-human/robot account.
 
-Successful authentication places both the user and token in `McpRequestContext`, attaches them to the Illuminate request, and sets FreeScout's current authenticated user. Data tools must use this context and FreeScout's existing authorization behavior in subsequent phases.
+Successful authentication places both the user and token in `McpRequestContext`, attaches them to the Illuminate request, and sets FreeScout's current authenticated user. Read tools use this context and FreeScout's existing authorization behavior for every call.
 
 Browser preflight requests do not authenticate, but still pass through the configured CORS and host protections. The endpoint remains disabled unless `MCP_SERVER_ENABLED=true`.
 
@@ -43,5 +43,11 @@ Browser preflight requests do not authenticate, but still pass through the confi
 - Administrators cannot retrieve plaintext or mint a token while impersonating another user.
 - Token lifetime is an administrator-controlled policy applied when a token is created. Setting it to zero permits non-expiring tokens.
 - Disabling personal tokens or regular-user access takes effect during authentication and does not require deleting records.
+
+## Read-data isolation
+
+Read tools build their database scope from the authenticated user's current mailbox IDs and assigned-only permission before applying filters or pagination. Direct ticket reads are also checked through FreeScout's conversation policy. Missing and unauthorized ticket IDs deliberately share one error, list results have no global total, unpublished threads are omitted, and cursors are created only from authorized result IDs.
+
+Customer results require at least one authorized conversation. Regular-user lookup returns only the caller; administrators retain FreeScout's administrator visibility. Knowledge Base queries are registered only for an active module with a recognized mailbox-scoped schema and apply the same mailbox boundary.
 
 OAuth is intentionally out of scope for this phase. It will be added as a separate authorization mechanism without weakening these personal-token rules.

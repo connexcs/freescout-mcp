@@ -6,7 +6,7 @@ return [
     'enabled' => filter_var(env('MCP_SERVER_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
     'server_name' => 'freescout-mcp',
     'server_title' => 'FreeScout MCP Server',
-    'server_version' => '0.2.0',
+    'server_version' => '0.3.0',
     'allowed_hosts' => array_values(array_unique(array_filter(array_map(
         'trim',
         explode(',', $appHost.','.env('MCP_SERVER_ALLOWED_HOSTS', ''))

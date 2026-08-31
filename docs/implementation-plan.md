@@ -32,7 +32,7 @@ Acceptance: FreeScout discovers the module, MCP discovery advertises only tools,
 
 Acceptance: two users receive different authentication contexts; copied database data cannot be used as a bearer token; revoked, expired, disabled-user, robot-account, policy-blocked, and malformed credentials fail closed. The PHP 8.1 FreeScout integration test covers module routes, migration-backed issuance, HTTP authentication, one-way storage, and revocation.
 
-## Phase 3 — permission-safe read tools
+## Phase 3 — permission-safe read tools (complete)
 
 - Introduce a request context carrying the authenticated FreeScout user.
 - Implement deterministic, paginated tools corresponding to the established integration: ticket/conversation lookup, ticket context and threads, ticket search, and mailbox listing.
@@ -42,6 +42,8 @@ Acceptance: two users receive different authentication contexts; copied database
 - Make the user-specific tool catalogue private and invalidate its cache when permissions or optional-module availability changes.
 
 Acceptance: cross-mailbox and cross-user authorization tests prove inaccessible records cannot be inferred by ID, search, counts, errors, or pagination.
+
+Implementation note: all list operations use descending ID keyset pagination after the authorization scope is applied. Unpublished thread drafts are excluded. The catalogue contains capability names only and is emitted with private cache semantics; record permissions are evaluated for every call so permission changes take effect immediately. Optional Knowledge Base tools fail closed unless an active module exposes a recognized mailbox-scoped schema.
 
 ## Phase 4 — controlled mutation tools and auditing
 

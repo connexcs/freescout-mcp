@@ -5,14 +5,17 @@ namespace Modules\McpServer\Tools;
 use Mcp\Schema\Tool;
 use Mcp\Schema\ToolAnnotations;
 use Mcp\Server\Builder;
+use Modules\McpServer\KnowledgeBase\KnowledgeBaseToolService;
 
 final class ReadToolCatalogue
 {
     private $tools;
+    private $knowledgeBase;
 
-    public function __construct(ReadToolService $tools)
+    public function __construct(ReadToolService $tools, ?KnowledgeBaseToolService $knowledgeBase = null)
     {
         $this->tools = $tools;
+        $this->knowledgeBase = $knowledgeBase;
     }
 
     public function register(Builder $builder): void
@@ -58,6 +61,25 @@ final class ReadToolCatalogue
             'limit' => $this->limit(),
             'cursor' => $this->cursor(),
         ]));
+
+        if (null !== $this->knowledgeBase && $this->knowledgeBase->available()) {
+            $this->add($builder, 'freescout_search_kb_articles', 'Search Knowledge Base articles', 'Search Knowledge Base articles in accessible mailboxes.', [$this->knowledgeBase, 'searchArticles'], $this->schema([
+                'query' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 200],
+                'limit' => $this->limit(),
+                'cursor' => $this->cursor(),
+            ], ['query']));
+            $this->add($builder, 'freescout_get_kb_article', 'Get Knowledge Base article', 'Read a Knowledge Base article in an accessible mailbox.', [$this->knowledgeBase, 'getArticle'], $this->schema([
+                'article_id' => $this->integer('Knowledge Base article ID.'),
+            ], ['article_id']));
+            $this->add($builder, 'freescout_search_kb_categories', 'Search Knowledge Base categories', 'Search Knowledge Base categories in accessible mailboxes.', [$this->knowledgeBase, 'searchCategories'], $this->schema([
+                'query' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 200],
+                'limit' => $this->limit(),
+                'cursor' => $this->cursor(),
+            ], ['query']));
+            $this->add($builder, 'freescout_get_kb_category', 'Get Knowledge Base category', 'Read a Knowledge Base category in an accessible mailbox.', [$this->knowledgeBase, 'getCategory'], $this->schema([
+                'category_id' => $this->integer('Knowledge Base category ID.'),
+            ], ['category_id']));
+        }
     }
 
     /** @param callable $handler @param array<string, mixed> $inputSchema */

@@ -102,7 +102,13 @@ final class FreeScoutReadRepository implements ReadRepository
         }
 
         $this->applyCursor($builder, $cursor);
-        $rows = $builder->orderBy('conversations.id', 'desc')->limit($limit + 1)->get();
+        // Re-check FreeScout's policy so extensions cannot widen the query result.
+        // Fetching a bounded overage lets denied records disappear without exposing
+        // them through counts or an otherwise unexplained next cursor.
+        $rows = $builder->orderBy('conversations.id', 'desc')->limit(($limit + 1) * 5)->get()
+            ->filter(function ($conversation) {
+                return $this->user()->can('view', $conversation);
+            })->values()->take($limit + 1);
         $hasMore = $rows->count() > $limit;
         $rows = $rows->take($limit);
 

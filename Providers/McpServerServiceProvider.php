@@ -14,6 +14,8 @@ use Modules\McpServer\Security\TokenCodec;
 use Modules\McpServer\Security\TokenPolicy;
 use Modules\McpServer\Services\McpServerFactory;
 use Modules\McpServer\Tools\ReadToolCatalogue;
+use Modules\McpServer\KnowledgeBase\KnowledgeBaseRepository;
+use Modules\McpServer\KnowledgeBase\KnowledgeBaseToolService;
 
 class McpServerServiceProvider extends ServiceProvider
 {
@@ -38,6 +40,8 @@ class McpServerServiceProvider extends ServiceProvider
         $this->app->singleton(McpRequestContext::class);
         $this->app->singleton(TokenRepository::class, EloquentTokenRepository::class);
         $this->app->singleton(ReadRepository::class, FreeScoutReadRepository::class);
+        $this->app->singleton(KnowledgeBaseRepository::class);
+        $this->app->singleton(KnowledgeBaseToolService::class);
 
         $this->app->singleton(McpServerFactory::class, function ($app) {
             return new McpServerFactory(

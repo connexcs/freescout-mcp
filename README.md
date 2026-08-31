@@ -4,7 +4,7 @@ A native FreeScout module that exposes FreeScout capabilities through the Model 
 
 ## Current status
 
-Phases 0 through 2 are complete: the repository contains the compatibility decision record, a loadable FreeScout module, a modern stateless HTTP MCP endpoint, and per-user bearer-token authentication. The endpoint currently advertises an empty tool catalogue. Permission-aware data tools and audit logging intentionally begin in later phases.
+Phases 0 through 3 are complete: the repository contains a loadable FreeScout module, a modern stateless HTTP MCP endpoint, per-user bearer-token authentication, and permission-aware read tools. Mutation tools and audit logging intentionally begin in Phase 4.
 
 The endpoint is disabled by default. Once enabled, every POST requires a valid token belonging to an active, policy-eligible FreeScout user.
 
@@ -35,6 +35,13 @@ To exercise the MCP SDK after loading a real FreeScout dependency graph:
 
 ```bash
 php scripts/freescout-runtime-smoke.php /path/to/freescout
+```
+
+The permission regression fixture must use an in-memory testing database:
+
+```bash
+APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: \
+  php scripts/freescout-read-integration.php /path/to/freescout
 ```
 
 ## Installing a development checkout
@@ -82,6 +89,12 @@ curl -sS https://support.example.com/mcp \
 
 Administrators can inspect token metadata and revoke individual or all tokens from a user's MCP Tokens page, but cannot recover token plaintext or create a token on another user's behalf. See [the security design](docs/security.md).
 
+## Read tools
+
+The authenticated catalogue includes ticket metadata, ticket context and published threads, ticket search, mailbox listing, customer search, and user search. Every query is constrained using the authenticated user's current FreeScout mailbox and assigned-ticket permissions before pagination. Inaccessible and missing ticket IDs produce the same result.
+
+When the official `knowledgebase` module is active and its compatible mailbox-scoped tables are present, four additional article/category search and read tools are registered. No Knowledge Base package is required by this module. See [the read-tool reference and security rules](docs/read-tools.md).
+
 ## Packaging
 
 Run `scripts/build-release.sh`. It creates `build/McpServer-<version>.zip` containing production Composer dependencies, ready to unpack into FreeScout's `Modules` directory.
@@ -89,7 +102,7 @@ Run `scripts/build-release.sh`. It creates `build/McpServer-<version>.zip` conta
 ## Roadmap
 
 - Phase 2 (complete): per-user bearer tokens, keyed hashes at rest, revocation, expiry, rate limits, and administrative controls
-- Phase 3: read-only conversation, customer, mailbox, user, and optional Knowledge Base tools
+- Phase 3 (complete): read-only conversation, customer, mailbox, user, and optional Knowledge Base tools
 - Phase 4: permission-safe mutation tools with explicit confirmation semantics and audit logging
 - Phase 5: OAuth authorization for hosted clients, without treating FreeScout's existing OAuth client module as an authorization server
 
