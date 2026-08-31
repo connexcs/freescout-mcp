@@ -28,5 +28,8 @@ final class BearerTokenParserTest extends TestCase
         yield 'empty' => ['Bearer '];
         yield 'multiple' => ['Bearer one, Bearer two'];
         yield 'embedded whitespace' => ['Bearer one two'];
+        yield 'tab separator' => ["Bearer\tone"];
+        yield 'line feed injection' => ["Bearer one\nX-Injected: yes"];
+        yield 'carriage return injection' => ["Bearer one\rX-Injected: yes"];
     }
 }

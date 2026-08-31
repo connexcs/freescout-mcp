@@ -15,6 +15,7 @@ require $freeScoutRoot.'/vendor/autoload.php';
 $app = require $freeScoutRoot.'/bootstrap/app.php';
 $console = $app->make(\Illuminate\Contracts\Console\Kernel::class);
 $console->bootstrap();
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 
 if (!$app->environment('testing')) {
     fwrite(STDERR, "Refusing to alter a database unless APP_ENV=testing.\n");
@@ -51,7 +52,7 @@ foreach (['mcpserver.endpoint', 'mcpserver.tokens.index', 'mcpserver.tokens.revo
 
 $mcpRoute = $app['router']->getRoutes()->getByName('mcpserver.endpoint');
 $middleware = $mcpRoute->middleware();
-if (!in_array('mcpserver.auth', $middleware, true) || !in_array('mcpserver.throttle', $middleware, true)) {
+if (!in_array('mcpserver.request_target', $middleware, true) || !in_array('mcpserver.auth', $middleware, true) || !in_array('mcpserver.throttle', $middleware, true)) {
     fwrite(STDERR, "MCP authentication middleware is not attached to the endpoint.\n");
     exit(1);
 }
@@ -108,7 +109,7 @@ try {
     $limiter = $app->make(\Illuminate\Cache\RateLimiter::class);
     $codec = $app->make(\Modules\McpServer\Security\TokenCodec::class);
     $limiter->clear('mcpserver:requests:'.$issued->record->id);
-    foreach (['192.0.2.10', '192.0.2.20', '192.0.2.30'] as $testIp) {
+    foreach (['192.0.2.10', '192.0.2.20', '192.0.2.30', '192.0.2.31', '192.0.2.32', '192.0.2.33'] as $testIp) {
         $limiter->clear('mcpserver:auth:'.$codec->fingerprint($testIp));
     }
 
@@ -175,6 +176,27 @@ try {
         throw new \RuntimeException('Failed-authentication rate limiting failed.');
     }
 
+    $user->status = \App\User::STATUS_DISABLED;
+    $user->save();
+    if (401 !== $call($issued->plainText, '192.0.2.31')->getStatusCode()) {
+        throw new \RuntimeException('A disabled user token was accepted.');
+    }
+    $user->status = \App\User::STATUS_DELETED;
+    $user->save();
+    if (401 !== $call($issued->plainText, '192.0.2.32')->getStatusCode()) {
+        throw new \RuntimeException('A deleted user token was accepted.');
+    }
+    $user->status = \App\User::STATUS_ACTIVE;
+    $user->save();
+
+    $issued->record->expires_at = \Carbon\Carbon::now()->subSecond();
+    $issued->record->save();
+    if (401 !== $call($issued->plainText, '192.0.2.33')->getStatusCode()) {
+        throw new \RuntimeException('An expired token was accepted.');
+    }
+    $issued->record->expires_at = \Carbon\Carbon::now()->addHour();
+    $issued->record->save();
+
     $issued->record->revoked_at = \Carbon\Carbon::now();
     $issued->record->save();
     $revoked = $call($issued->plainText, '192.0.2.30');
@@ -182,7 +204,7 @@ try {
         throw new \RuntimeException('Revoked token was accepted.');
     }
 
-    fwrite(STDOUT, "FreeScout module routes, token storage, authentication, and revocation passed.\n");
+    fwrite(STDOUT, "FreeScout module routes, token storage, request-target middleware, authentication, user-state, expiry, and revocation passed.\n");
 } finally {
     $connection->rollBack();
 }

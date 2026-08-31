@@ -45,7 +45,7 @@ This keeps SDK dependencies isolated and avoids upgrading or replacing any FreeS
 - One `POST|OPTIONS /mcp` route is registered without FreeScout's browser session or CSRF middleware.
 - The endpoint is disabled by default until phase 2 authentication is available.
 - Request bodies are capped at 1 MiB by default.
-- DNS rebinding protection validates the request host against `APP_URL` plus an operator allowlist.
+- A module request-target policy validates every request host against `APP_URL` plus an operator allowlist.
 - Cross-origin browser access is denied unless explicit origins are configured.
 - Cache hints are private because the eventual tool catalogue will be user-specific.
 - No FreeScout data tools are registered in phase 1.

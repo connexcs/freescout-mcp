@@ -51,9 +51,13 @@ final class ClientMetadataValidator
 
     public function assertExactRedirect(array $metadata, string $redirectUri): void
     {
-        if (!in_array($redirectUri, $metadata['redirect_uris'] ?? [], true)) {
-            throw new OAuthException('invalid_request', 'redirect_uri is not registered for this client.');
+        foreach ($metadata['redirect_uris'] ?? [] as $registered) {
+            if (is_string($registered) && (hash_equals($registered, $redirectUri) || $this->matchesVariableLoopbackPort($registered, $redirectUri))) {
+                return;
+            }
         }
+
+        throw new OAuthException('invalid_request', 'redirect_uri is not registered for this client.');
     }
 
     private function validRedirectUri(string $uri): bool
@@ -69,5 +73,26 @@ final class ClientMetadataValidator
         $host = strtolower($parts['host']);
 
         return 'https' === $scheme || ('http' === $scheme && in_array($host, ['localhost', '127.0.0.1', '::1'], true));
+    }
+
+    private function matchesVariableLoopbackPort(string $registered, string $requested): bool
+    {
+        $expected = parse_url($registered);
+        $actual = parse_url($requested);
+        if (false === $expected || false === $actual || isset($expected['port']) || !isset($actual['port'])) {
+            return false;
+        }
+        $host = strtolower((string) ($expected['host'] ?? ''));
+        if (!in_array($host, ['127.0.0.1', '::1'], true) || $actual['port'] < 1 || $actual['port'] > 65535) {
+            return false;
+        }
+
+        foreach (['scheme', 'host', 'path', 'query'] as $part) {
+            if (($expected[$part] ?? null) !== ($actual[$part] ?? null)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

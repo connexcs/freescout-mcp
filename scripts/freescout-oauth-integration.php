@@ -15,6 +15,7 @@ require $root.'/vendor/autoload.php';
 require dirname(__DIR__).'/vendor/autoload.php';
 $app = require $root.'/bootstrap/app.php';
 $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 
 if (!$app->environment('testing') || 'sqlite' !== config('database.default') || ':memory:' !== config('database.connections.sqlite.database')) {
     fwrite(STDERR, "Refusing to run unless an in-memory SQLite testing database is configured.\n");
@@ -104,9 +105,17 @@ if (null !== $service->authenticateAccess($rotated['access_token'], null, $resou
 
 $code2 = $service->issueCode($user, $client, 'https://client.example/callback', $resource, ['mcp:read'], $challenge);
 $pair2 = $service->exchangeCode($code2, $client->client_id, 'https://client.example/callback', $resource, $verifier);
+try {
+    $service->refresh($pair2['refresh_token'], $client->client_id, $resource, 'mcp:write');
+    throw new \RuntimeException('Refresh-token scope escalation was accepted.');
+} catch (\Modules\McpServer\OAuth\OAuthException $exception) {
+    if ('invalid_scope' !== $exception->error) {
+        throw $exception;
+    }
+}
 $service->revoke($pair2['refresh_token']);
 if (null !== $service->authenticateAccess($pair2['access_token'], null, $resource)) {
     throw new \RuntimeException('Refresh-token revocation did not revoke related access tokens.');
 }
 
-fwrite(STDOUT, "FreeScout OAuth code, PKCE, audience, rotation, reuse detection, and revocation passed.\n");
+fwrite(STDOUT, "FreeScout OAuth code, PKCE, audience, scope enforcement, rotation, reuse detection, and revocation passed.\n");

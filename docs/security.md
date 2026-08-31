@@ -31,6 +31,8 @@ OAuth access tokens are additionally bound to the exact canonical MCP endpoint s
 
 Browser preflight requests do not authenticate, but still pass through the configured CORS and host protections. The endpoint remains disabled unless `MCP_SERVER_ENABLED=true`.
 
+Every request validates `Host` against `APP_URL` plus `MCP_SERVER_ALLOWED_HOSTS`, even when an `Origin` header is present. Browser origins must exactly match `MCP_SERVER_ALLOWED_ORIGINS`; malformed origins, credentials in origins, paths, prefixes, and suffix lookalikes fail closed.
+
 ## Abuse controls
 
 - Failed authentication is limited by source IP, defaulting to 30 attempts per minute.
@@ -39,6 +41,7 @@ Browser preflight requests do not authenticate, but still pass through the confi
 - `401` responses include a Bearer challenge, protected-resource metadata URL, and minimum read scope, but never disclose whether a selector, secret, user, expiry, revocation, or policy check failed.
 - The request context is cleared at the beginning of every request.
 - Last-used metadata is updated at most every five minutes to avoid a write on every tool call.
+- Request bodies and encoded tool results are independently capped by `MCP_SERVER_MAX_BODY_BYTES` and `MCP_SERVER_MAX_TOOL_OUTPUT_BYTES`, both 1 MiB by default.
 
 ## Management rules
 
@@ -71,3 +74,5 @@ OAuth uses the same request context and database permission scopes, so it does n
 Mutation tools require both the environment gate and administrator switch. Authorization is re-evaluated after locking the ticket inside the transaction. Each request reserves a key scoped to token and tool; an exact retry returns the stored response, while reusing the key for different arguments is rejected. Failed operations roll back their reservation and domain changes.
 
 Audit rows contain actor ID, token ID, tool, target, outcome, idempotency key, error classification, and bounded metadata such as body length or recipient count. They do not contain bearer credentials, note text, draft text, or recipient addresses. Audit-storage failure aborts a successful mutation so an unaudited write cannot commit.
+
+Scope-denied mutation attempts are recorded as `denied` with `insufficient_scope`, using only the same safe metadata allowlist.

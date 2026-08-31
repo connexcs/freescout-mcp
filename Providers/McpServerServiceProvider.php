@@ -7,6 +7,7 @@ use Modules\McpServer\Contracts\TokenRepository;
 use Modules\McpServer\Contracts\ReadRepository;
 use Modules\McpServer\Http\Middleware\AuthenticateMcpToken;
 use Modules\McpServer\Http\Middleware\ThrottleMcpRequests;
+use Modules\McpServer\Http\Middleware\ValidateMcpRequestTarget;
 use Modules\McpServer\Repositories\EloquentTokenRepository;
 use Modules\McpServer\Repositories\FreeScoutReadRepository;
 use Modules\McpServer\Security\McpRequestContext;
@@ -21,6 +22,7 @@ use Modules\McpServer\Repositories\FreeScoutMutationRepository;
 use Modules\McpServer\Mutations\MutationToolCatalogue;
 use Modules\McpServer\Contracts\MutationRunner;
 use Modules\McpServer\Mutations\MutationExecutor;
+use Modules\McpServer\Security\RequestTargetPolicy;
 
 class McpServerServiceProvider extends ServiceProvider
 {
@@ -43,6 +45,12 @@ class McpServerServiceProvider extends ServiceProvider
         });
         $this->app->singleton(TokenPolicy::class);
         $this->app->singleton(McpRequestContext::class);
+        $this->app->singleton(RequestTargetPolicy::class, function ($app) {
+            return new RequestTargetPolicy(
+                (array) $app['config']->get('mcpserver.allowed_hosts', ['localhost']),
+                (array) $app['config']->get('mcpserver.allowed_origins', [])
+            );
+        });
         $this->app->singleton(TokenRepository::class, EloquentTokenRepository::class);
         $this->app->singleton(ReadRepository::class, FreeScoutReadRepository::class);
         $this->app->singleton(KnowledgeBaseRepository::class);
@@ -60,6 +68,7 @@ class McpServerServiceProvider extends ServiceProvider
 
         $this->app['router']->aliasMiddleware('mcpserver.auth', AuthenticateMcpToken::class);
         $this->app['router']->aliasMiddleware('mcpserver.throttle', ThrottleMcpRequests::class);
+        $this->app['router']->aliasMiddleware('mcpserver.request_target', ValidateMcpRequestTarget::class);
     }
 
     public function boot()

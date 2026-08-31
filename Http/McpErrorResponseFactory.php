@@ -37,6 +37,11 @@ final class McpErrorResponseFactory
         ]);
     }
 
+    public function forbidden(Request $request, string $message = 'Forbidden'): Response
+    {
+        return $this->jsonRpc($request, 403, -32004, $message);
+    }
+
     public function unavailable(Request $request): Response
     {
         return $this->jsonRpc($request, 503, -32003, 'MCP Server is disabled');

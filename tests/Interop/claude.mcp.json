@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "freescout": {
+            "type": "http",
+            "url": "https://support.example.test/mcp",
+            "headers": {
+                "Authorization": "Bearer ${FREESCOUT_MCP_TOKEN}"
+            }
+        }
+    }
+}
+

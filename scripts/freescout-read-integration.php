@@ -15,6 +15,9 @@ require $root.'/vendor/autoload.php';
 require dirname(__DIR__).'/vendor/autoload.php';
 $app = require $root.'/bootstrap/app.php';
 $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+// FreeScout's pinned Laravel 5.5 dependencies emit PHP 8.4 deprecations that
+// its error handler otherwise promotes to exceptions in this test fixture.
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 
 if (!$app->environment('testing') || 'sqlite' !== config('database.default') || ':memory:' !== config('database.connections.sqlite.database')) {
     fwrite(STDERR, "Refusing to run unless an in-memory SQLite testing database is configured.\n");
@@ -100,9 +103,11 @@ $schema->create('mcpserver_idempotency', function ($table) {
 });
 
 $now = \Carbon\Carbon::now();
+$admin = \DB::table('users')->insertGetId(['first_name' => 'Ada', 'last_name' => 'Admin', 'email' => 'admin@example.test', 'role' => \App\User::ROLE_ADMIN, 'type' => \App\User::TYPE_USER, 'status' => \App\User::STATUS_ACTIVE, 'permissions' => null, 'created_at' => $now, 'updated_at' => $now]);
 $userA = \DB::table('users')->insertGetId(['first_name' => 'Alice', 'last_name' => 'Agent', 'email' => 'alice@example.test', 'role' => \App\User::ROLE_USER, 'type' => \App\User::TYPE_USER, 'status' => \App\User::STATUS_ACTIVE, 'permissions' => null, 'created_at' => $now, 'updated_at' => $now]);
 $userB = \DB::table('users')->insertGetId(['first_name' => 'Bob', 'last_name' => 'Agent', 'email' => 'bob@example.test', 'role' => \App\User::ROLE_USER, 'type' => \App\User::TYPE_USER, 'status' => \App\User::STATUS_ACTIVE, 'permissions' => null, 'created_at' => $now, 'updated_at' => $now]);
 $limited = \DB::table('users')->insertGetId(['first_name' => 'Limited', 'last_name' => 'Agent', 'email' => 'limited@example.test', 'role' => \App\User::ROLE_USER, 'type' => \App\User::TYPE_USER, 'status' => \App\User::STATUS_ACTIVE, 'permissions' => json_encode([\App\User::PERM_ONLY_ASSIGNED_TICKETS => 1]), 'created_at' => $now, 'updated_at' => $now]);
+$noAccess = \DB::table('users')->insertGetId(['first_name' => 'No', 'last_name' => 'Access', 'email' => 'no-access@example.test', 'role' => \App\User::ROLE_USER, 'type' => \App\User::TYPE_USER, 'status' => \App\User::STATUS_ACTIVE, 'permissions' => null, 'created_at' => $now, 'updated_at' => $now]);
 $mailboxA = \DB::table('mailboxes')->insertGetId(['name' => 'A', 'email' => 'a@example.test', 'created_at' => $now, 'updated_at' => $now]);
 $mailboxB = \DB::table('mailboxes')->insertGetId(['name' => 'B', 'email' => 'b@example.test', 'created_at' => $now, 'updated_at' => $now]);
 foreach ([$mailboxA, $mailboxB] as $mailboxId) {
@@ -127,6 +132,7 @@ $articleB = \DB::table('kb_articles')->insertGetId(['mailbox_id' => $mailboxB, '
 
 $context = new \Modules\McpServer\Security\McpRequestContext();
 $repository = new \Modules\McpServer\Repositories\FreeScoutReadRepository($context);
+$readTools = new \Modules\McpServer\Tools\ReadToolService($repository);
 $setUser = static function (int $id) use ($context) {
     $user = \App\User::findOrFail($id);
     \Auth::setUser($user);
@@ -136,6 +142,18 @@ $setUser = static function (int $id) use ($context) {
 $setUser($userA);
 if (null === $repository->ticket($ticketA) || null !== $repository->ticket($ticketB)) {
     throw new \RuntimeException('Direct ticket authorization failed.');
+}
+foreach ([$ticketB, 999999] as $inaccessibleId) {
+    foreach (['getTicket', 'getTicketContext', 'getTicketThreads'] as $method) {
+        try {
+            $readTools->{$method}(['ticket_id' => $inaccessibleId]);
+            throw new \RuntimeException('Ticket enumeration probe was allowed.');
+        } catch (\Mcp\Exception\ToolCallException $exception) {
+            if ('Ticket not found.' !== $exception->getMessage()) {
+                throw $exception;
+            }
+        }
+    }
 }
 $secretSearch = $repository->searchTickets('Secret', [], 25, null);
 if ([] !== $secretSearch['items'] || null !== $secretSearch['next_cursor']) {
@@ -161,8 +179,18 @@ if ([] !== $secretArticles['items'] || null !== $secretArticles['next_cursor']) 
 $mutationRepository = new \Modules\McpServer\Repositories\FreeScoutMutationRepository($context);
 $mutationExecutor = new \Modules\McpServer\Mutations\MutationExecutor($context, new \Modules\McpServer\Mutations\AuditLogger($context), new \Modules\McpServer\Security\TokenCodec('integration-pepper'));
 $mutationTools = new \Modules\McpServer\Mutations\MutationToolService($mutationRepository, $mutationExecutor);
-$note = $mutationTools->addNote(['ticket_id' => $ticketA, 'body' => 'Private integration note', 'idempotency_key' => 'note-integration-001']);
-$noteReplay = $mutationTools->addNote(['ticket_id' => $ticketA, 'body' => 'Private integration note', 'idempotency_key' => 'note-integration-001']);
+$context->set(new \Modules\McpServer\Security\AuthenticatedPrincipal(\App\User::findOrFail($userA), (object) ['id' => 1], 'oauth', ['mcp:read']));
+try {
+    $mutationTools->addNote(['ticket_id' => $ticketA, 'body' => 'SCOPE-DENIED-BODY', 'idempotency_key' => 'scope-denied-integration']);
+    throw new \RuntimeException('A read-only OAuth scope performed a mutation.');
+} catch (\Mcp\Exception\ToolCallException $exception) {
+    if (!str_contains($exception->getMessage(), 'mcp:write')) {
+        throw $exception;
+    }
+}
+$setUser($userA);
+$note = $mutationTools->addNote(['ticket_id' => $ticketA, 'body' => 'AUDIT-NOTE-BODY', 'idempotency_key' => 'note-integration-001', 'bearer_probe' => 'fsmcp_AUDIT-BEARER-TOKEN']);
+$noteReplay = $mutationTools->addNote(['ticket_id' => $ticketA, 'body' => 'AUDIT-NOTE-BODY', 'idempotency_key' => 'note-integration-001', 'bearer_probe' => 'fsmcp_AUDIT-BEARER-TOKEN']);
 if ($note['thread_id'] !== $noteReplay['thread_id'] || !$noteReplay['replayed'] || 1 !== \DB::table('threads')->where('id', $note['thread_id'])->count()) {
     throw new \RuntimeException('Note idempotency failed.');
 }
@@ -174,12 +202,12 @@ $unassigned = $mutationTools->updateTicket(['ticket_id' => $ticketA, 'assignee_i
 if (null !== $unassigned['assignee_id']) {
     throw new \RuntimeException('Ticket unassignment mutation failed.');
 }
-$draft = $mutationTools->createDraftReply(['ticket_id' => $ticketA, 'body' => 'Customer draft', 'cc' => ['copy@example.test'], 'idempotency_key' => 'draft-integration-001']);
+$draft = $mutationTools->createDraftReply(['ticket_id' => $ticketA, 'body' => 'AUDIT-DRAFT-BODY', 'cc' => ['AUDIT-RECIPIENT@example.test'], 'idempotency_key' => 'draft-integration-001']);
 if ($draft['sent'] || \App\Thread::STATE_DRAFT !== (int) \DB::table('threads')->where('id', $draft['thread_id'])->value('state')) {
     throw new \RuntimeException('Draft mutation sent or published a reply.');
 }
 try {
-    $mutationTools->addNote(['ticket_id' => $ticketB, 'body' => 'Forbidden', 'idempotency_key' => 'denied-integration-01']);
+    $mutationTools->addNote(['ticket_id' => $ticketB, 'body' => 'AUDIT-FORBIDDEN-BODY', 'idempotency_key' => 'denied-integration-01']);
     throw new \RuntimeException('Cross-mailbox mutation was allowed.');
 } catch (\Mcp\Exception\ToolCallException $exception) {
     if ('Ticket not found.' !== $exception->getMessage()) {
@@ -207,14 +235,35 @@ $audits = \DB::table('mcpserver_audit_logs')->get();
 if (!$audits->contains('outcome', 'succeeded') || !$audits->contains('outcome', 'replayed') || !$audits->contains('outcome', 'denied') || !$audits->contains('outcome', 'validation_failed')) {
     throw new \RuntimeException('Mutation audit outcomes are incomplete.');
 }
-if (\DB::table('mcpserver_audit_logs')->where('argument_meta', 'like', '%Private integration note%')->exists()) {
-    throw new \RuntimeException('Audit log stored mutation content.');
+if (!$audits->contains('error_code', 'insufficient_scope')) {
+    throw new \RuntimeException('Scope denial was not audited.');
+}
+$auditDump = json_encode($audits, JSON_THROW_ON_ERROR);
+foreach (['fsmcp_AUDIT-BEARER-TOKEN', 'AUDIT-NOTE-BODY', 'AUDIT-DRAFT-BODY', 'AUDIT-FORBIDDEN-BODY', 'SCOPE-DENIED-BODY', 'AUDIT-RECIPIENT@example.test'] as $sensitiveValue) {
+    if (str_contains($auditDump, $sensitiveValue)) {
+        throw new \RuntimeException('Audit log stored sensitive content: '.$sensitiveValue);
+    }
 }
 
 $setUser($limited);
 if (null !== $repository->ticket($ticketA) || null === $repository->ticket($ticketLimited)) {
     throw new \RuntimeException('Assigned-only ticket authorization failed.');
 }
+
+$setUser($noAccess);
+if (null !== $repository->ticket($ticketA) || [] !== $repository->searchTickets('', [], 25, null)['items']
+    || [] !== $repository->mailboxes(25, null)['items'] || [] !== $repository->customers('Customer', 25, null)['items']
+    || [] !== $knowledgeBase->searchArticles('', 25, null)['items']) {
+    throw new \RuntimeException('No-access user received FreeScout data.');
+}
+
+$setUser($admin);
+if (null === $repository->ticket($ticketA) || null === $repository->ticket($ticketB)
+    || 2 !== count($repository->mailboxes(25, null)['items']) || null === $knowledgeBase->article($articleB)) {
+    throw new \RuntimeException('Administrator access matrix failed.');
+}
+
+$setUser($limited);
 
 $provider = new \Modules\McpServer\Providers\McpServerServiceProvider($app);
 $provider->register();
@@ -234,4 +283,4 @@ foreach (['freescout_add_note', 'freescout_update_ticket', 'freescout_create_dra
 }
 $app['blade.compiler']->compile(dirname(__DIR__).'/Resources/views/settings.blade.php');
 
-fwrite(STDOUT, "FreeScout read isolation plus mutation allow/deny, retry, rollback, draft, and audit behavior passed.\n");
+fwrite(STDOUT, "FreeScout role isolation, enumeration resistance, scope enforcement, mutations, and audit redaction passed.\n");

@@ -53,4 +53,24 @@ final class ClientMetadataValidatorTest extends TestCase
             'redirect_uris' => ['https://client.example/callback'],
         ], 'https://client.example/client.json');
     }
+
+    public function testAcceptsCodexVariableLoopbackPortWithoutWeakeningRedirectMatching(): void
+    {
+        $validator = new ClientMetadataValidator();
+        $metadata = $validator->validate([
+            'client_id' => 'https://chatgpt.com/oauth/codex/example/client.json',
+            'client_name' => 'Codex',
+            'redirect_uris' => ['http://127.0.0.1/callback'],
+        ]);
+
+        $validator->assertExactRedirect($metadata, 'http://127.0.0.1:49152/callback');
+        foreach (['http://127.0.0.1:49152/other', 'http://localhost:49152/callback', 'http://127.0.0.1:0/callback'] as $unsafe) {
+            try {
+                $validator->assertExactRedirect($metadata, $unsafe);
+                self::fail('Accepted an unregistered redirect: '.$unsafe);
+            } catch (OAuthException $exception) {
+                self::assertSame('invalid_request', $exception->error);
+            }
+        }
+    }
 }

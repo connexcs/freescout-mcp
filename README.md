@@ -4,7 +4,7 @@ A native FreeScout module that exposes FreeScout capabilities through the Model 
 
 ## Current status
 
-Phases 0 through 5 are complete: the repository contains a loadable FreeScout module, a modern stateless HTTP MCP endpoint, per-user personal and OAuth authentication, permission-aware read tools, and opt-in audited mutation tools.
+Phases 0 through 6 are complete: the repository contains a loadable FreeScout module, a modern stateless HTTP MCP endpoint, per-user personal and OAuth authentication, permission-aware read tools, opt-in audited mutation tools, and security/interoperability qualification.
 
 The endpoint is disabled by default. Once enabled, every POST requires a valid personal or audience-bound OAuth access token belonging to an active, policy-eligible FreeScout user.
 
@@ -68,6 +68,7 @@ MCP_SERVER_MUTATIONS_ENABLED=false
 MCP_SERVER_ALLOWED_HOSTS=support.example.com
 MCP_SERVER_ALLOWED_ORIGINS=https://example-client.test
 MCP_SERVER_MAX_BODY_BYTES=1048576
+MCP_SERVER_MAX_TOOL_OUTPUT_BYTES=1048576
 MCP_SERVER_CATALOG_TTL_MS=300000
 MCP_SERVER_RATE_LIMIT=120
 MCP_SERVER_AUTH_RATE_LIMIT=30
@@ -124,12 +125,21 @@ There is deliberately no send-reply tool. Creating a draft never sends mail or m
 
 Run `scripts/build-release.sh`. It creates `build/McpServer-<version>.zip` containing production Composer dependencies, ready to unpack into FreeScout's `Modules` directory.
 
+## Interoperability qualification
+
+`composer interop-config` validates token-free Codex `config.toml` and Claude Code `.mcp.json` fixtures. `composer interop-inspector` runs MCP Inspector 2.4.0 with an Authorization header against a local endpoint. Inspector currently starts the older initialization lifecycle, so the probe verifies that the modern-only server rejects its missing stateless metadata. Direct conformance tests cover the `2026-07-28` lifecycle until Inspector supports it.
+
+See [the Phase 6 qualification record](docs/phase-6-security-interoperability.md) for the test matrix and current client results.
+
 ## Roadmap
 
 - Phase 2 (complete): per-user bearer tokens, keyed hashes at rest, revocation, expiry, rate limits, and administrative controls
 - Phase 3 (complete): read-only conversation, customer, mailbox, user, and optional Knowledge Base tools
 - Phase 4 (complete): opt-in note, ticket-update, and unsent draft tools with idempotency and audit logging
 - Phase 5 (complete): OAuth 2.1 discovery, browser consent, CIMD/DCR clients, PKCE, scoped access, refresh rotation, and revocation
+- Phase 6 (complete): role and token-state security matrix, enumeration resistance, request/output bounds, audit redaction, and client/protocol interoperability probes
+- Phase 7 (next): installation, client, proxy, security, troubleshooting, and release documentation plus the versioned production ZIP
+- Phase 8 (delivered early in Phase 5): OAuth authorization, consent, PKCE, rotation, revocation, CIMD/DCR, and FreeScout-session SSO
 
 ## License
 

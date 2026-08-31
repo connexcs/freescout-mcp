@@ -27,7 +27,7 @@ Route::group([
 Route::group([
     'prefix' => \Helper::getSubdirectory(),
     'namespace' => 'Modules\\McpServer\\Http\\Controllers',
-    'middleware' => ['mcpserver.auth', 'mcpserver.throttle'],
+    'middleware' => ['mcpserver.request_target', 'mcpserver.auth', 'mcpserver.throttle'],
 ], function () {
     Route::match(['POST', 'OPTIONS'], '/mcp', 'McpController@handle')
         ->name('mcpserver.endpoint');

@@ -1,0 +1,5 @@
+[mcp_servers.freescout]
+url = "https://support.example.test/mcp"
+bearer_token_env_var = "FREESCOUT_MCP_TOKEN"
+required = true
+

@@ -39,6 +39,9 @@ final class TokenPolicy
         if (!method_exists($user, 'isActive') || !$user->isActive()) {
             return false;
         }
+        if (method_exists($user, 'isDeleted') && $user->isDeleted()) {
+            return false;
+        }
 
         if (isset($user->type) && 1 !== (int) $user->type) {
             return false;

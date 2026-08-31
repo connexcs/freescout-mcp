@@ -57,7 +57,7 @@ Acceptance: every mutation has allow/deny, validation, retry, rollback, and audi
 
 Implementation note: the current catalogue has no customer-send operation. Draft creation is a separate tool whose result always reports `sent: false`; a future externally visible send tool must introduce an explicit confirmation argument and cannot alter draft semantics. All mutations require per-token idempotency keys, re-check FreeScout authorization under a row lock, run atomically, and write content-free audit metadata.
 
-## Phase 5 — OAuth authorization (complete)
+## Phase 5 — OAuth authorization (complete; original Phase 8 delivered early)
 
 - Implement MCP authorization-server metadata and the current OAuth profile required by hosted clients.
 - Reuse the authenticated FreeScout browser session for consent and account selection.
@@ -68,6 +68,26 @@ Implementation note: the current catalogue has no customer-send operation. Draft
 Acceptance: complete interoperability tests with the current Codex and Claude connector flows, plus OAuth negative/security cases.
 
 Implementation note: the module is a local OAuth 2.1 authorization server and reuses FreeScout's authenticated browser session only for account authentication and consent. It advertises RFC 9728 protected-resource metadata, RFC 8414 authorization-server metadata, CIMD, and deprecated DCR fallback. Authorization codes require S256 PKCE and exact redirects; access tokens are short-lived and resource-bound; refresh tokens rotate, and reuse revokes their complete family. All opaque credentials are stored only as keyed hashes. Personal bearer tokens remain supported.
+
+## Phase 6 — security and interoperability (complete)
+
+- Exercise administrator, mailbox member, assigned-only, and no-access roles through the same FreeScout database permission path.
+- Reject disabled/deleted owners, expired/revoked tokens, insufficient scopes, inaccessible-record enumeration, malformed bearer/target headers, and oversized requests or outputs.
+- Scan mutation audits with sentinel bearer, note, draft, denied-body, and recipient values to prove only safe metadata is retained.
+- Validate environment-backed Codex and Claude Code remote HTTP bearer configurations and run the current MCP Inspector compatibility probe.
+- Keep direct `2026-07-28` protocol conformance tests for discovery, catalogue, metadata, method/version header agreement, legacy method rejection, and malformed JSON.
+
+Acceptance: the security matrix and automated checks pass. MCP Inspector 2.4.0 is recorded as a client limitation because it still sends the removed initialization lifecycle; the server does not weaken modern-only protocol handling to accommodate it. See `phase-6-security-interoperability.md`.
+
+## Phase 7 — documentation and release (next)
+
+- Produce installation/upgrade, reverse-proxy, token, tool/scope, Knowledge Base, troubleshooting, and security documentation.
+- Include tested Codex `config.toml` and Claude Code `.mcp.json` examples.
+- Build and validate a versioned module ZIP with production dependencies.
+
+## Phase 8 — OAuth (complete ahead of sequence)
+
+The OAuth deliverables originally assigned to this phase were implemented and tested in Phase 5: protected-resource and authorization-server metadata, authorization code with PKCE, consent/scopes, short-lived access tokens, rotating refresh tokens, revocation, CIMD, DCR fallback, and SSO through the normal FreeScout browser session.
 
 ## Cross-cutting release gates
 

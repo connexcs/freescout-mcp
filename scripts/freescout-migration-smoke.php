@@ -14,6 +14,7 @@ if (false === $root || !is_file($root.'/bootstrap/app.php')) {
 require $root.'/vendor/autoload.php';
 $app = require $root.'/bootstrap/app.php';
 $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 
 if (!$app->environment('testing') || 'sqlite' !== config('database.default') || ':memory:' !== config('database.connections.sqlite.database')) {
     fwrite(STDERR, "Refusing to run unless an in-memory SQLite testing database is configured.\n");

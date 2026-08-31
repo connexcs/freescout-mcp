@@ -6,7 +6,6 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Mcp\Schema\Wire\McpHeader;
 use Mcp\Server\Transport\Http\Middleware\CorsMiddleware;
-use Mcp\Server\Transport\Http\Middleware\DnsRebindingProtectionMiddleware;
 use Mcp\Server\Transport\StatelessHttpTransport;
 use Modules\McpServer\Http\LaravelResponseFactory;
 use Modules\McpServer\Http\McpErrorResponseFactory;
@@ -52,11 +51,6 @@ final class McpController
                     ['POST', 'OPTIONS'],
                     ['Accept', 'Authorization', 'Content-Type', McpHeader::PROTOCOL_VERSION, McpHeader::METHOD, McpHeader::NAME],
                     []
-                ),
-                new DnsRebindingProtectionMiddleware(
-                    (array) config('mcpserver.allowed_hosts', ['localhost']),
-                    $factory,
-                    $factory
                 ),
             ]
         );

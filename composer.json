@@ -36,10 +36,15 @@
         "lint": "bash scripts/lint.sh",
         "test": "phpunit",
         "smoke": "php scripts/protocol-smoke.php",
+        "interop-config": "php scripts/client-config-smoke.php",
+        "interop-inspector": "bash scripts/inspector-smoke.sh",
+        "security-audit": "composer audit --locked --no-interaction",
         "check": [
             "composer validate --no-check-publish",
+            "@security-audit",
             "@lint",
             "@test",
+            "@interop-config",
             "@smoke"
         ]
     },
