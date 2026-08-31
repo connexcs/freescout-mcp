@@ -34,8 +34,11 @@ final class MutationExecutor implements MutationRunner
         if (null === $principal) {
             throw new \LogicException('Mutation attempted without an authenticated principal.');
         }
+        if (!$principal->hasScope('mcp:write')) {
+            throw new ToolCallException('The OAuth token does not grant mcp:write.');
+        }
 
-        $tokenId = (int) $principal->token->id;
+        $tokenId = $principal->auditTokenId();
         $hash = $this->codec->fingerprint(json_encode($this->canonicalize($requestData), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
 
         try {

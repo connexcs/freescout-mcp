@@ -33,7 +33,7 @@ final class McpServerFactory
         $builder = Server::builder()
             ->setServerInfo(
                 (string) ($this->config['server_name'] ?? 'freescout-mcp'),
-                (string) ($this->config['server_version'] ?? '0.4.0'),
+                (string) ($this->config['server_version'] ?? '0.5.0'),
                 'Permission-aware FreeScout capabilities over MCP.',
                 null,
                 null,

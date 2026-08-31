@@ -26,13 +26,16 @@ if (!$app->environment('testing') || 'sqlite' !== config('database.default') || 
 
 require dirname(__DIR__).'/Database/Migrations/2026_08_30_000000_create_mcpserver_tokens_table.php';
 require dirname(__DIR__).'/Database/Migrations/2026_08_31_000000_create_mcpserver_mutation_tables.php';
+require dirname(__DIR__).'/Database/Migrations/2026_09_01_000000_create_mcpserver_oauth_tables.php';
 
 $tokens = new \CreateMcpserverTokensTable();
 $mutations = new \CreateMcpserverMutationTables();
+$oauth = new \CreateMcpserverOauthTables();
 $tokens->up();
 $mutations->up();
+$oauth->up();
 
-foreach (['mcpserver_tokens', 'mcpserver_audit_logs', 'mcpserver_idempotency'] as $table) {
+foreach (['mcpserver_tokens', 'mcpserver_audit_logs', 'mcpserver_idempotency', 'mcpserver_oauth_clients', 'mcpserver_oauth_codes', 'mcpserver_oauth_tokens'] as $table) {
     if (!\Schema::hasTable($table)) {
         throw new \RuntimeException('Migration did not create '.$table.'.');
     }
@@ -43,10 +46,11 @@ foreach (['tool', 'outcome', 'argument_meta', 'error_code'] as $column) {
     }
 }
 
+$oauth->down();
 $mutations->down();
 $tokens->down();
-if (\Schema::hasTable('mcpserver_audit_logs') || \Schema::hasTable('mcpserver_idempotency') || \Schema::hasTable('mcpserver_tokens')) {
+if (\Schema::hasTable('mcpserver_audit_logs') || \Schema::hasTable('mcpserver_idempotency') || \Schema::hasTable('mcpserver_tokens') || \Schema::hasTable('mcpserver_oauth_clients')) {
     throw new \RuntimeException('Migration rollback did not remove module tables.');
 }
 
-fwrite(STDOUT, "FreeScout mutation and token migrations passed on SQLite.\n");
+fwrite(STDOUT, "FreeScout OAuth, mutation, and token migrations passed on SQLite.\n");

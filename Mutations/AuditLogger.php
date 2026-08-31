@@ -20,7 +20,7 @@ final class AuditLogger
         $principal = $this->context->principal();
         McpAuditLog::create([
             'user_id' => null === $principal ? null : (int) $principal->user->id,
-            'token_id' => null === $principal ? null : (int) $principal->token->id,
+            'token_id' => null === $principal ? null : $principal->auditTokenId(),
             'tool' => $tool,
             'target_type' => $targetType,
             'target_id' => $targetId,

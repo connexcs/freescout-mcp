@@ -10,6 +10,8 @@ use Modules\McpServer\Mutations\MutationToolService;
 use Modules\McpServer\Services\McpServerFactory;
 use Modules\McpServer\Tests\Support\FakeMutationRepository;
 use Modules\McpServer\Tests\Support\FakeMutationRunner;
+use Modules\McpServer\Security\AuthenticatedPrincipal;
+use Modules\McpServer\Security\McpRequestContext;
 use PHPUnit\Framework\TestCase;
 
 final class MutationToolCatalogueTest extends TestCase
@@ -38,5 +40,19 @@ final class MutationToolCatalogueTest extends TestCase
         self::assertTrue($tools[1]['annotations']['destructiveHint']);
         self::assertStringContainsString('never send', $tools[2]['description']);
         self::assertArrayNotHasKey('confirm_send', $tools[2]['inputSchema']['properties']);
+    }
+
+    public function testReadOnlyOAuthScopeHidesMutationCatalogue(): void
+    {
+        $enabled = static fn () => true;
+        $context = new McpRequestContext();
+        $context->set(new AuthenticatedPrincipal((object) ['id' => 1], (object) ['id' => 2], 'oauth', ['mcp:read']));
+        $catalogue = new MutationToolCatalogue(
+            new MutationToolService(new FakeMutationRepository(), new FakeMutationRunner()),
+            new MutationPolicy($enabled, $enabled),
+            $context
+        );
+
+        self::assertFalse($catalogue->enabled());
     }
 }

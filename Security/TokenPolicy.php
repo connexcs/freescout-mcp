@@ -30,7 +30,13 @@ final class TokenPolicy
     /** @param object $user */
     public function canAuthenticateUser($user): bool
     {
-        if (!$this->personalTokensEnabled() || !method_exists($user, 'isActive') || !$user->isActive()) {
+        return $this->personalTokensEnabled() && $this->canAuthenticateOAuthUser($user);
+    }
+
+    /** @param object $user */
+    public function canAuthenticateOAuthUser($user): bool
+    {
+        if (!method_exists($user, 'isActive') || !$user->isActive()) {
             return false;
         }
 

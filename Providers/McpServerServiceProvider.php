@@ -106,6 +106,7 @@ class McpServerServiceProvider extends ServiceProvider
                 'mcpserver.allow_non_admin_tokens' => \App\Option::get('mcpserver.allow_non_admin_tokens', true),
                 'mcpserver.token_lifetime_days' => \App\Option::get('mcpserver.token_lifetime_days', 90),
                 'mcpserver.mutations_enabled' => \App\Option::get('mcpserver.mutations_enabled', false),
+                'mcpserver.oauth_enabled' => \App\Option::get('mcpserver.oauth_enabled', true),
             ];
         }, 20, 2);
 
@@ -123,6 +124,7 @@ class McpServerServiceProvider extends ServiceProvider
                     'mcpserver.allow_non_admin_tokens' => ['default' => true],
                     'mcpserver.token_lifetime_days' => ['default' => 90],
                     'mcpserver.mutations_enabled' => ['default' => false],
+                    'mcpserver.oauth_enabled' => ['default' => true],
                 ],
             ];
         }, 20, 2);

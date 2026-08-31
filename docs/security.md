@@ -12,6 +12,8 @@ A personal token has the form `fsmcp_<selector>_<secret>`:
 
 A database export therefore contains neither usable bearer credentials nor an unkeyed verifier. Changing the pepper deliberately invalidates all issued tokens.
 
+OAuth authorization codes, access tokens, and refresh tokens use separate `fsmcp_oc`, `fsmcp_oa`, and `fsmcp_or` prefixes but the same 96-bit selector, 256-bit secret, and keyed-hash storage design. Codes expire after five minutes and are single-use. Access tokens default to one hour; refresh tokens default to 30 days and rotate on every use. Reuse of a rotated refresh token revokes its complete family.
+
 ## Authentication rules
 
 Every enabled MCP POST must supply exactly one `Authorization: Bearer` credential. Authentication fails when:
@@ -25,6 +27,8 @@ Every enabled MCP POST must supply exactly one `Authorization: Bearer` credentia
 
 Successful authentication places both the user and token in `McpRequestContext`, attaches them to the Illuminate request, and sets FreeScout's current authenticated user. Read tools use this context and FreeScout's existing authorization behavior for every call.
 
+OAuth access tokens are additionally bound to the exact canonical MCP endpoint supplied through the RFC 8707 `resource` parameter. `mcp:read` is required for normal access; `mcp:write` gates mutation catalogue exposure and execution. Disabling personal tokens does not disable OAuth, while disabled/deleted/robot-account and regular-user policy checks apply to both mechanisms.
+
 Browser preflight requests do not authenticate, but still pass through the configured CORS and host protections. The endpoint remains disabled unless `MCP_SERVER_ENABLED=true`.
 
 ## Abuse controls
@@ -32,7 +36,7 @@ Browser preflight requests do not authenticate, but still pass through the confi
 - Failed authentication is limited by source IP, defaulting to 30 attempts per minute.
 - Authenticated traffic is limited by token ID, defaulting to 120 requests per minute.
 - Rejections return JSON-RPC-shaped errors with `Cache-Control: no-store`.
-- `401` responses include a Bearer challenge but never disclose whether a selector, secret, user, expiry, revocation, or policy check failed.
+- `401` responses include a Bearer challenge, protected-resource metadata URL, and minimum read scope, but never disclose whether a selector, secret, user, expiry, revocation, or policy check failed.
 - The request context is cleared at the beginning of every request.
 - Last-used metadata is updated at most every five minutes to avoid a write on every tool call.
 
@@ -50,7 +54,17 @@ Read tools build their database scope from the authenticated user's current mail
 
 Customer results require at least one authorized conversation. Regular-user lookup returns only the caller; administrators retain FreeScout's administrator visibility. Knowledge Base queries are registered only for an active module with a recognized mailbox-scoped schema and apply the same mailbox boundary.
 
-OAuth is intentionally out of scope for this phase. It will be added as a separate authorization mechanism without weakening these personal-token rules.
+OAuth uses the same request context and database permission scopes, so it does not create a separate data-access path around these rules.
+
+## OAuth flow controls
+
+- Authorization requires an authenticated FreeScout browser session and fresh CSRF-protected consent; the pending request is stored server-side in that session.
+- Only authorization-code and refresh-token grants for public clients are accepted. S256 PKCE, exact redirect matching, and the exact MCP resource are mandatory.
+- Authorization responses include `iss`; discovery advertises issuer-response validation support.
+- Redirects must be HTTPS, except HTTP loopback callbacks on `localhost`, `127.0.0.1`, or `::1`. The callback hostname is shown on consent, with a separate loopback warning.
+- CIMD URLs must be HTTPS document paths. Fetches reject credentials, query/fragment components, IP literals, private/reserved DNS results, redirects, oversized bodies, invalid TLS, and mismatched document identities. DNS answers are pinned for the request to limit rebinding.
+- DCR remains optional and can be disabled after clients migrate to CIMD. It creates public clients without secrets.
+- RFC 7009 revocation is non-oracular. Revoking a refresh token or a connection in FreeScout revokes its entire token family.
 
 ## Mutation controls
 

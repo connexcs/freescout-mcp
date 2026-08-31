@@ -10,6 +10,8 @@ use Modules\McpServer\Security\BearerTokenParser;
 use Modules\McpServer\Security\McpRequestContext;
 use Modules\McpServer\Security\TokenAuthenticator;
 use Modules\McpServer\Security\TokenCodec;
+use Modules\McpServer\OAuth\OAuthServerConfiguration;
+use Modules\McpServer\OAuth\OAuthTokenService;
 
 final class AuthenticateMcpToken
 {
@@ -19,6 +21,8 @@ final class AuthenticateMcpToken
     private $limiter;
     private $errors;
     private $codec;
+    private $oauth;
+    private $oauthConfiguration;
 
     public function __construct(
         TokenAuthenticator $authenticator,
@@ -26,7 +30,9 @@ final class AuthenticateMcpToken
         McpRequestContext $context,
         RateLimiter $limiter,
         McpErrorResponseFactory $errors,
-        TokenCodec $codec
+        TokenCodec $codec,
+        OAuthTokenService $oauth,
+        OAuthServerConfiguration $oauthConfiguration
     ) {
         $this->authenticator = $authenticator;
         $this->parser = $parser;
@@ -34,6 +40,8 @@ final class AuthenticateMcpToken
         $this->limiter = $limiter;
         $this->errors = $errors;
         $this->codec = $codec;
+        $this->oauth = $oauth;
+        $this->oauthConfiguration = $oauthConfiguration;
     }
 
     public function handle(Request $request, Closure $next)
@@ -58,7 +66,9 @@ final class AuthenticateMcpToken
             return $this->errors->unauthorized($request, false);
         }
 
-        $principal = $this->authenticator->authenticate($plainToken, $request->ip());
+        $principal = 0 === strpos($plainToken, 'fsmcp_oa_') && $this->oauthConfiguration->enabled()
+            ? $this->oauth->authenticateAccess($plainToken, $request->ip(), $this->oauthConfiguration->resource())
+            : $this->authenticator->authenticate($plainToken, $request->ip());
         if (null === $principal) {
             $this->limiter->hit($failureKey, 1);
 

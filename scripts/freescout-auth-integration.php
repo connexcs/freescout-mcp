@@ -37,7 +37,7 @@ if (null === $app['router']->getRoutes()->getByName('mcpserver.endpoint') && \Ap
     $app['router']->getRoutes()->refreshNameLookups();
 }
 
-foreach (['mcpserver.endpoint', 'mcpserver.tokens.index', 'mcpserver.tokens.revoke'] as $routeName) {
+foreach (['mcpserver.endpoint', 'mcpserver.tokens.index', 'mcpserver.tokens.revoke', 'mcpserver.oauth.authorization_server', 'mcpserver.oauth.protected_resource', 'mcpserver.oauth.authorize', 'mcpserver.oauth.token', 'mcpserver.oauth.revoke'] as $routeName) {
     if (null === $app['router']->getRoutes()->getByName($routeName)) {
         fwrite(STDERR, sprintf(
             "Module route %s is missing (database active=%s, repository active=%s).\n",
@@ -60,6 +60,8 @@ foreach ([
     dirname(__DIR__).'/Resources/views/settings.blade.php',
     dirname(__DIR__).'/Resources/views/tokens/index.blade.php',
     dirname(__DIR__).'/Resources/views/tokens/menu.blade.php',
+    dirname(__DIR__).'/Resources/views/oauth/consent.blade.php',
+    dirname(__DIR__).'/Resources/views/oauth/error.blade.php',
 ] as $viewPath) {
     $app['blade.compiler']->compile($viewPath);
 }
@@ -71,6 +73,7 @@ if (!isset($sections['mcpserver'])) {
 }
 
 $app->make(\Modules\McpServer\Http\Controllers\TokenController::class);
+$app->make(\Modules\McpServer\Http\Controllers\OAuthController::class);
 
 $mcpRouteUri = '/'.ltrim($mcpRoute->uri(), '/');
 

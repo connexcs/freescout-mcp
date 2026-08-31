@@ -57,7 +57,7 @@ Acceptance: every mutation has allow/deny, validation, retry, rollback, and audi
 
 Implementation note: the current catalogue has no customer-send operation. Draft creation is a separate tool whose result always reports `sent: false`; a future externally visible send tool must introduce an explicit confirmation argument and cannot alter draft semantics. All mutations require per-token idempotency keys, re-check FreeScout authorization under a row lock, run atomically, and write content-free audit metadata.
 
-## Phase 5 — OAuth authorization
+## Phase 5 — OAuth authorization (complete)
 
 - Implement MCP authorization-server metadata and the current OAuth profile required by hosted clients.
 - Reuse the authenticated FreeScout browser session for consent and account selection.
@@ -66,6 +66,8 @@ Implementation note: the current catalogue has no customer-send operation. Draft
 - Keep personal bearer tokens available for Codex/Claude configurations that support static headers.
 
 Acceptance: complete interoperability tests with the current Codex and Claude connector flows, plus OAuth negative/security cases.
+
+Implementation note: the module is a local OAuth 2.1 authorization server and reuses FreeScout's authenticated browser session only for account authentication and consent. It advertises RFC 9728 protected-resource metadata, RFC 8414 authorization-server metadata, CIMD, and deprecated DCR fallback. Authorization codes require S256 PKCE and exact redirects; access tokens are short-lived and resource-bound; refresh tokens rotate, and reuse revokes their complete family. All opaque credentials are stored only as keyed hashes. Personal bearer tokens remain supported.
 
 ## Cross-cutting release gates
 

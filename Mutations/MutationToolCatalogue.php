@@ -6,21 +6,26 @@ use Mcp\Schema\Tool;
 use Mcp\Schema\ToolAnnotations;
 use Mcp\Server\Builder;
 use Modules\McpServer\Tools\CallbackToolHandler;
+use Modules\McpServer\Security\McpRequestContext;
 
 final class MutationToolCatalogue
 {
     private $tools;
     private $policy;
+    private $context;
 
-    public function __construct(MutationToolService $tools, MutationPolicy $policy)
+    public function __construct(MutationToolService $tools, MutationPolicy $policy, ?McpRequestContext $context = null)
     {
         $this->tools = $tools;
         $this->policy = $policy;
+        $this->context = $context;
     }
 
     public function enabled(): bool
     {
-        return $this->policy->enabled();
+        $principal = null === $this->context ? null : $this->context->principal();
+
+        return $this->policy->enabled() && (null === $principal || $principal->hasScope('mcp:write'));
     }
 
     public function register(Builder $builder): void

@@ -40,6 +40,19 @@
     </div>
 
     <div class="form-group">
+        <label for="mcpserver-oauth" class="col-sm-3 control-label">{{ __('OAuth connections') }}</label>
+        <div class="col-sm-7">
+            <div class="onoffswitch-wrap">
+                <div class="onoffswitch">
+                    <input type="checkbox" name="settings[mcpserver.oauth_enabled]" value="1" id="mcpserver-oauth" class="onoffswitch-checkbox" @if (old('settings[mcpserver.oauth_enabled]', $settings['mcpserver.oauth_enabled']))checked="checked"@endif>
+                    <label class="onoffswitch-label" for="mcpserver-oauth"></label>
+                </div>
+            </div>
+            <p class="form-help">{{ __('Allows users to authorize hosted MCP clients through their existing FreeScout browser login. Personal tokens remain available separately.') }}</p>
+        </div>
+    </div>
+
+    <div class="form-group">
         <label for="mcpserver-mutations" class="col-sm-3 control-label">{{ __('Write tools') }}</label>
         <div class="col-sm-7">
             <div class="onoffswitch-wrap">

@@ -36,6 +36,7 @@ final class TokenPolicyTest extends TestCase
         self::assertFalse($defaultPolicy->canAuthenticateUser(new FakeMcpUser(false, true)));
         self::assertFalse($defaultPolicy->canAuthenticateUser(new FakeMcpUser(true, true, 2)));
         self::assertFalse($disabledPolicy->canAuthenticateUser(new FakeMcpUser(true, true)));
+        self::assertTrue($disabledPolicy->canAuthenticateOAuthUser(new FakeMcpUser(true, true)));
     }
 
     public function testLifetimeIsBounded(): void

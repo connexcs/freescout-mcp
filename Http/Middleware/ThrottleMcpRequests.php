@@ -32,7 +32,8 @@ final class ThrottleMcpRequests
             return $this->errors->unauthorized($request);
         }
 
-        $key = 'mcpserver:requests:'.(int) $token->id;
+        $principal = $this->context->principal();
+        $key = 'mcpserver:requests:'.(null === $principal ? (int) $token->id : $principal->credentialType.':'.(int) $token->id);
         $maxAttempts = max(1, (int) config('mcpserver.authenticated_rate_limit', 120));
 
         if ($this->limiter->tooManyAttempts($key, $maxAttempts, 1)) {

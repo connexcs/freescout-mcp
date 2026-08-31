@@ -4,9 +4,9 @@ A native FreeScout module that exposes FreeScout capabilities through the Model 
 
 ## Current status
 
-Phases 0 through 4 are complete: the repository contains a loadable FreeScout module, a modern stateless HTTP MCP endpoint, per-user bearer-token authentication, permission-aware read tools, and opt-in audited mutation tools.
+Phases 0 through 5 are complete: the repository contains a loadable FreeScout module, a modern stateless HTTP MCP endpoint, per-user personal and OAuth authentication, permission-aware read tools, and opt-in audited mutation tools.
 
-The endpoint is disabled by default. Once enabled, every POST requires a valid token belonging to an active, policy-eligible FreeScout user.
+The endpoint is disabled by default. Once enabled, every POST requires a valid personal or audience-bound OAuth access token belonging to an active, policy-eligible FreeScout user.
 
 ## Compatibility
 
@@ -37,7 +37,7 @@ To exercise the MCP SDK after loading a real FreeScout dependency graph:
 php scripts/freescout-runtime-smoke.php /path/to/freescout
 ```
 
-The read/write permission regression fixture and migration smoke test must use an in-memory testing database:
+The read/write, OAuth, and migration regression fixtures must use an in-memory testing database:
 
 ```bash
 APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: \
@@ -45,6 +45,9 @@ APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: \
 
 APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: \
   php scripts/freescout-migration-smoke.php /path/to/freescout
+
+APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: \
+  php scripts/freescout-oauth-integration.php /path/to/freescout
 ```
 
 ## Installing a development checkout
@@ -68,6 +71,12 @@ MCP_SERVER_MAX_BODY_BYTES=1048576
 MCP_SERVER_CATALOG_TTL_MS=300000
 MCP_SERVER_RATE_LIMIT=120
 MCP_SERVER_AUTH_RATE_LIMIT=30
+MCP_SERVER_OAUTH_ENABLED=true
+MCP_SERVER_OAUTH_ISSUER=https://support.example.com
+MCP_SERVER_OAUTH_DCR_ENABLED=true
+MCP_SERVER_OAUTH_ACCESS_TOKEN_LIFETIME=3600
+MCP_SERVER_OAUTH_REFRESH_TOKEN_LIFETIME=2592000
+MCP_SERVER_OAUTH_CIMD_CACHE=3600
 ```
 
 `MCP_SERVER_TOKEN_PEPPER` is optional and defaults to `APP_KEY`. If set, it must be a stable, secret value. Changing either the configured pepper or the fallback `APP_KEY` invalidates every existing MCP token.
@@ -93,6 +102,12 @@ curl -sS https://support.example.com/mcp \
 
 Administrators can inspect token metadata and revoke individual or all tokens from a user's MCP Tokens page, but cannot recover token plaintext or create a token on another user's behalf. See [the security design](docs/security.md).
 
+## OAuth connections
+
+Hosted clients can discover OAuth automatically from the `401` Bearer challenge and the module's protected-resource and authorization-server metadata. The user signs into FreeScout in the browser, sees the client identity, callback host, and requested scopes, then approves access to that FreeScout account. The OAuth & Social Login module may supply that browser login, but is not used as the MCP authorization server.
+
+Set `APP_URL` and, when needed, `MCP_SERVER_OAUTH_ISSUER` to the stable public HTTPS origin before authorizing clients. OAuth supports preferred Client ID Metadata Documents and deprecated dynamic registration for current-client compatibility. Access defaults to `mcp:read`; clients must request `mcp:write` before mutation tools are advertised or callable. Users and administrators can revoke OAuth connections under **Profile → MCP Tokens**. See [the OAuth deployment and protocol reference](docs/oauth.md).
+
 ## Read tools
 
 The authenticated catalogue includes ticket metadata, ticket context and published threads, ticket search, mailbox listing, customer search, and user search. Every query is constrained using the authenticated user's current FreeScout mailbox and assigned-ticket permissions before pagination. Inaccessible and missing ticket IDs produce the same result.
@@ -114,7 +129,7 @@ Run `scripts/build-release.sh`. It creates `build/McpServer-<version>.zip` conta
 - Phase 2 (complete): per-user bearer tokens, keyed hashes at rest, revocation, expiry, rate limits, and administrative controls
 - Phase 3 (complete): read-only conversation, customer, mailbox, user, and optional Knowledge Base tools
 - Phase 4 (complete): opt-in note, ticket-update, and unsent draft tools with idempotency and audit logging
-- Phase 5: OAuth authorization for hosted clients, without treating FreeScout's existing OAuth client module as an authorization server
+- Phase 5 (complete): OAuth 2.1 discovery, browser consent, CIMD/DCR clients, PKCE, scoped access, refresh rotation, and revocation
 
 ## License
 

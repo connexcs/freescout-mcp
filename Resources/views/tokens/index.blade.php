@@ -134,6 +134,39 @@
                         </form>
                     @endif
                 @endif
+
+                <h3 class="subheader">{{ __('OAuth connections') }}</h3>
+                @if (!count($oauthConnections))
+                    <p class="text-help">{{ __('No MCP clients have been authorized through your FreeScout login.') }}</p>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead><tr><th>{{ __('Client') }}</th><th>{{ __('Scopes') }}</th><th>{{ __('Created') }}</th><th>{{ __('Status') }}</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach ($oauthConnections as $connection)
+                                <tr>
+                                    <td>{{ $connection->client ? $connection->client->client_name : __('Unknown client') }}</td>
+                                    <td><code>{{ $connection->scopes }}</code></td>
+                                    <td>{{ App\User::dateFormat($connection->created_at) }}</td>
+                                    <td>
+                                        @if ($connection->revoked_at)<span class="label label-default">{{ __('Revoked') }}</span>
+                                        @elseif ($connection->expires_at && $connection->expires_at->isPast())<span class="label label-warning">{{ __('Expired') }}</span>
+                                        @else<span class="label label-success">{{ __('Active') }}</span>@endif
+                                    </td>
+                                    <td class="text-right">
+                                        @if (!$connection->revoked_at)
+                                            <form method="POST" action="{{ route('mcpserver.oauth.revoke_user', ['id' => $user->id, 'family' => $connection->family_id]) }}">
+                                                {{ csrf_field() }}{{ method_field('DELETE') }}
+                                                <button type="submit" class="btn btn-xs btn-danger">{{ __('Revoke') }}</button>
+                                            </form>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
             </div>
         </div>
     </div>

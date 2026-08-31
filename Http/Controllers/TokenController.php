@@ -7,6 +7,7 @@ use App\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Modules\McpServer\Entities\McpToken;
+use Modules\McpServer\Entities\McpOAuthToken;
 use Modules\McpServer\Security\TokenIssuer;
 use Modules\McpServer\Security\TokenManagementPolicy;
 use Modules\McpServer\Security\TokenPolicy;
@@ -29,11 +30,14 @@ final class TokenController extends Controller
     {
         $user = $this->managedUser($id);
         $tokens = McpToken::where('user_id', $user->id)->orderBy('id', 'desc')->get();
+        $oauthConnections = McpOAuthToken::with('client')->where('user_id', $user->id)
+            ->where('type', 'refresh')->orderBy('id', 'desc')->get()->unique('family_id')->values();
 
         return view('mcpserver::tokens.index', [
             'user' => $user,
             'users' => $this->sidebarUsers($user->id),
             'tokens' => $tokens,
+            'oauthConnections' => $oauthConnections,
             'canIssue' => $this->management->canIssue(auth()->user(), $user),
             'plainToken' => session('mcpserver_plain_token'),
             'endpoint' => route('mcpserver.endpoint'),
@@ -90,6 +94,20 @@ final class TokenController extends Controller
 
         return redirect()->route('mcpserver.tokens.index', ['id' => $user->id])
             ->with('flash_success_floating', __('All MCP tokens for this user have been revoked.'));
+    }
+
+    public function revokeOAuth($id, $family)
+    {
+        $user = $this->managedUser($id);
+        if (1 !== preg_match('/\A[A-Za-z0-9_-]{24}\z/', (string) $family)) {
+            abort(404);
+        }
+
+        McpOAuthToken::where('user_id', $user->id)->where('family_id', $family)
+            ->whereNull('revoked_at')->update(['revoked_at' => Carbon::now(), 'updated_at' => Carbon::now()]);
+
+        return redirect()->route('mcpserver.tokens.index', ['id' => $user->id])
+            ->with('flash_success_floating', __('MCP OAuth connection revoked.'));
     }
 
     private function managedUser($id): User
