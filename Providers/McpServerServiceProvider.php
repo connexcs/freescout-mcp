@@ -16,6 +16,11 @@ use Modules\McpServer\Services\McpServerFactory;
 use Modules\McpServer\Tools\ReadToolCatalogue;
 use Modules\McpServer\KnowledgeBase\KnowledgeBaseRepository;
 use Modules\McpServer\KnowledgeBase\KnowledgeBaseToolService;
+use Modules\McpServer\Contracts\MutationRepository;
+use Modules\McpServer\Repositories\FreeScoutMutationRepository;
+use Modules\McpServer\Mutations\MutationToolCatalogue;
+use Modules\McpServer\Contracts\MutationRunner;
+use Modules\McpServer\Mutations\MutationExecutor;
 
 class McpServerServiceProvider extends ServiceProvider
 {
@@ -42,11 +47,14 @@ class McpServerServiceProvider extends ServiceProvider
         $this->app->singleton(ReadRepository::class, FreeScoutReadRepository::class);
         $this->app->singleton(KnowledgeBaseRepository::class);
         $this->app->singleton(KnowledgeBaseToolService::class);
+        $this->app->singleton(MutationRepository::class, FreeScoutMutationRepository::class);
+        $this->app->singleton(MutationRunner::class, MutationExecutor::class);
 
         $this->app->singleton(McpServerFactory::class, function ($app) {
             return new McpServerFactory(
                 $app['config']->get('mcpserver', []),
-                $app->make(ReadToolCatalogue::class)
+                $app->make(ReadToolCatalogue::class),
+                $app->make(MutationToolCatalogue::class)
             );
         });
 
@@ -97,6 +105,7 @@ class McpServerServiceProvider extends ServiceProvider
                 'mcpserver.personal_tokens_enabled' => \App\Option::get('mcpserver.personal_tokens_enabled', true),
                 'mcpserver.allow_non_admin_tokens' => \App\Option::get('mcpserver.allow_non_admin_tokens', true),
                 'mcpserver.token_lifetime_days' => \App\Option::get('mcpserver.token_lifetime_days', 90),
+                'mcpserver.mutations_enabled' => \App\Option::get('mcpserver.mutations_enabled', false),
             ];
         }, 20, 2);
 
@@ -113,6 +122,7 @@ class McpServerServiceProvider extends ServiceProvider
                     'mcpserver.personal_tokens_enabled' => ['default' => true],
                     'mcpserver.allow_non_admin_tokens' => ['default' => true],
                     'mcpserver.token_lifetime_days' => ['default' => 90],
+                    'mcpserver.mutations_enabled' => ['default' => false],
                 ],
             ];
         }, 20, 2);

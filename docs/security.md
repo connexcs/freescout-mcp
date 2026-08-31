@@ -51,3 +51,9 @@ Read tools build their database scope from the authenticated user's current mail
 Customer results require at least one authorized conversation. Regular-user lookup returns only the caller; administrators retain FreeScout's administrator visibility. Knowledge Base queries are registered only for an active module with a recognized mailbox-scoped schema and apply the same mailbox boundary.
 
 OAuth is intentionally out of scope for this phase. It will be added as a separate authorization mechanism without weakening these personal-token rules.
+
+## Mutation controls
+
+Mutation tools require both the environment gate and administrator switch. Authorization is re-evaluated after locking the ticket inside the transaction. Each request reserves a key scoped to token and tool; an exact retry returns the stored response, while reusing the key for different arguments is rejected. Failed operations roll back their reservation and domain changes.
+
+Audit rows contain actor ID, token ID, tool, target, outcome, idempotency key, error classification, and bounded metadata such as body length or recipient count. They do not contain bearer credentials, note text, draft text, or recipient addresses. Audit-storage failure aborts a successful mutation so an unaudited write cannot commit.

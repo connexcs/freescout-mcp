@@ -4,7 +4,7 @@ A native FreeScout module that exposes FreeScout capabilities through the Model 
 
 ## Current status
 
-Phases 0 through 3 are complete: the repository contains a loadable FreeScout module, a modern stateless HTTP MCP endpoint, per-user bearer-token authentication, and permission-aware read tools. Mutation tools and audit logging intentionally begin in Phase 4.
+Phases 0 through 4 are complete: the repository contains a loadable FreeScout module, a modern stateless HTTP MCP endpoint, per-user bearer-token authentication, permission-aware read tools, and opt-in audited mutation tools.
 
 The endpoint is disabled by default. Once enabled, every POST requires a valid token belonging to an active, policy-eligible FreeScout user.
 
@@ -37,11 +37,14 @@ To exercise the MCP SDK after loading a real FreeScout dependency graph:
 php scripts/freescout-runtime-smoke.php /path/to/freescout
 ```
 
-The permission regression fixture must use an in-memory testing database:
+The read/write permission regression fixture and migration smoke test must use an in-memory testing database:
 
 ```bash
 APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: \
   php scripts/freescout-read-integration.php /path/to/freescout
+
+APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: \
+  php scripts/freescout-migration-smoke.php /path/to/freescout
 ```
 
 ## Installing a development checkout
@@ -58,6 +61,7 @@ The host allowlist defaults to the hostname in `APP_URL`. Extra hosts and browse
 
 ```dotenv
 MCP_SERVER_ENABLED=false
+MCP_SERVER_MUTATIONS_ENABLED=false
 MCP_SERVER_ALLOWED_HOSTS=support.example.com
 MCP_SERVER_ALLOWED_ORIGINS=https://example-client.test
 MCP_SERVER_MAX_BODY_BYTES=1048576
@@ -95,6 +99,12 @@ The authenticated catalogue includes ticket metadata, ticket context and publish
 
 When the official `knowledgebase` module is active and its compatible mailbox-scoped tables are present, four additional article/category search and read tools are registered. No Knowledge Base package is required by this module. See [the read-tool reference and security rules](docs/read-tools.md).
 
+## Mutation tools
+
+Write tools are disabled by default and require both `MCP_SERVER_MUTATIONS_ENABLED=true` and the **Write tools** administrator setting. When enabled, users can add internal notes, update ticket status/assignment, and create unsent draft replies within their existing FreeScout permissions. Every call requires an idempotency key and produces a redacted audit record.
+
+There is deliberately no send-reply tool. Creating a draft never sends mail or makes content customer-visible. See [the mutation-tool and audit reference](docs/mutation-tools.md).
+
 ## Packaging
 
 Run `scripts/build-release.sh`. It creates `build/McpServer-<version>.zip` containing production Composer dependencies, ready to unpack into FreeScout's `Modules` directory.
@@ -103,7 +113,7 @@ Run `scripts/build-release.sh`. It creates `build/McpServer-<version>.zip` conta
 
 - Phase 2 (complete): per-user bearer tokens, keyed hashes at rest, revocation, expiry, rate limits, and administrative controls
 - Phase 3 (complete): read-only conversation, customer, mailbox, user, and optional Knowledge Base tools
-- Phase 4: permission-safe mutation tools with explicit confirmation semantics and audit logging
+- Phase 4 (complete): opt-in note, ticket-update, and unsent draft tools with idempotency and audit logging
 - Phase 5: OAuth authorization for hosted clients, without treating FreeScout's existing OAuth client module as an authorization server
 
 ## License

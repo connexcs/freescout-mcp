@@ -4,9 +4,10 @@ $appHost = parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST) ?: 'local
 
 return [
     'enabled' => filter_var(env('MCP_SERVER_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+    'mutations_enabled' => filter_var(env('MCP_SERVER_MUTATIONS_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
     'server_name' => 'freescout-mcp',
     'server_title' => 'FreeScout MCP Server',
-    'server_version' => '0.3.0',
+    'server_version' => '0.4.0',
     'allowed_hosts' => array_values(array_unique(array_filter(array_map(
         'trim',
         explode(',', $appHost.','.env('MCP_SERVER_ALLOWED_HOSTS', ''))
@@ -24,5 +25,6 @@ return [
         'personal_tokens_enabled' => ['default' => true],
         'allow_non_admin_tokens' => ['default' => true],
         'token_lifetime_days' => ['default' => 90],
+        'mutations_enabled' => ['default' => false],
     ],
 ];

@@ -40,6 +40,19 @@
     </div>
 
     <div class="form-group">
+        <label for="mcpserver-mutations" class="col-sm-3 control-label">{{ __('Write tools') }}</label>
+        <div class="col-sm-7">
+            <div class="onoffswitch-wrap">
+                <div class="onoffswitch">
+                    <input type="checkbox" name="settings[mcpserver.mutations_enabled]" value="1" id="mcpserver-mutations" class="onoffswitch-checkbox" @if (old('settings[mcpserver.mutations_enabled]', $settings['mcpserver.mutations_enabled']))checked="checked"@endif>
+                    <label class="onoffswitch-label" for="mcpserver-mutations"></label>
+                </div>
+            </div>
+            <p class="form-help">{{ __('Requires MCP_SERVER_MUTATIONS_ENABLED=true. Enables audited note, ticket update, and draft-reply tools. Draft replies are never sent.') }}</p>
+        </div>
+    </div>
+
+    <div class="form-group">
         <label class="col-sm-3 control-label">{{ __('MCP endpoint') }}</label>
         <div class="col-sm-7">
             <p class="form-control-static"><code>{{ route('mcpserver.endpoint') }}</code></p>

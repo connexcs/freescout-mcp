@@ -45,7 +45,7 @@ Acceptance: cross-mailbox and cross-user authorization tests prove inaccessible 
 
 Implementation note: all list operations use descending ID keyset pagination after the authorization scope is applied. Unpublished thread drafts are excluded. The catalogue contains capability names only and is emitted with private cache semantics; record permissions are evaluated for every call so permission changes take effect immediately. Optional Knowledge Base tools fail closed unless an active module exposes a recognized mailbox-scoped schema.
 
-## Phase 4 — controlled mutation tools and auditing
+## Phase 4 — controlled mutation tools and auditing (complete)
 
 - Add note, status/assignment update, and draft-reply tools matching the useful operations in the existing MCP project.
 - Keep sending a reply separate from drafting and require explicit confirmation semantics for externally visible actions.
@@ -54,6 +54,8 @@ Implementation note: all list operations use descending ID keyset pagination aft
 - Add idempotency protection where retries could duplicate side effects.
 
 Acceptance: every mutation has allow/deny, validation, retry, rollback, and audit tests.
+
+Implementation note: the current catalogue has no customer-send operation. Draft creation is a separate tool whose result always reports `sent: false`; a future externally visible send tool must introduce an explicit confirmation argument and cannot alter draft semantics. All mutations require per-token idempotency keys, re-check FreeScout authorization under a row lock, run atomically, and write content-free audit metadata.
 
 ## Phase 5 — OAuth authorization
 
