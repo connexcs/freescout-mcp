@@ -8,23 +8,26 @@ use Mcp\Server;
 use Mcp\Server\Stateless\StatelessProtocol;
 use Mcp\Server\Wire\CachePolicy;
 use Modules\McpServer\Support\LegacyCompatibleContainer;
+use Modules\McpServer\Tools\ReadToolCatalogue;
 
 final class McpServerFactory
 {
     /** @var array<string, mixed> */
     private $config;
+    private $catalogue;
 
     /** @param array<string, mixed> $config */
-    public function __construct(array $config = [])
+    public function __construct(array $config = [], ?ReadToolCatalogue $catalogue = null)
     {
         $this->config = $config;
+        $this->catalogue = $catalogue;
     }
 
     public function build(): StatelessProtocol
     {
         $ttl = max(0, (int) ($this->config['catalog_ttl_ms'] ?? 300000));
 
-        return Server::builder()
+        $builder = Server::builder()
             ->setServerInfo(
                 (string) ($this->config['server_name'] ?? 'freescout-mcp'),
                 (string) ($this->config['server_version'] ?? '0.2.0'),
@@ -44,7 +47,12 @@ final class McpServerFactory
                     ->withMethod('tools/list', $ttl)
             )
             ->setContainer(new LegacyCompatibleContainer())
-            ->setHeaderValidator(true)
-            ->buildStateless([ProtocolVersion::V2026_07_28]);
+            ->setHeaderValidator(true);
+
+        if (null !== $this->catalogue) {
+            $this->catalogue->register($builder);
+        }
+
+        return $builder->buildStateless([ProtocolVersion::V2026_07_28]);
     }
 }

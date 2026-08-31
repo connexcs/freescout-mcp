@@ -4,13 +4,16 @@ namespace Modules\McpServer\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Modules\McpServer\Contracts\TokenRepository;
+use Modules\McpServer\Contracts\ReadRepository;
 use Modules\McpServer\Http\Middleware\AuthenticateMcpToken;
 use Modules\McpServer\Http\Middleware\ThrottleMcpRequests;
 use Modules\McpServer\Repositories\EloquentTokenRepository;
+use Modules\McpServer\Repositories\FreeScoutReadRepository;
 use Modules\McpServer\Security\McpRequestContext;
 use Modules\McpServer\Security\TokenCodec;
 use Modules\McpServer\Security\TokenPolicy;
 use Modules\McpServer\Services\McpServerFactory;
+use Modules\McpServer\Tools\ReadToolCatalogue;
 
 class McpServerServiceProvider extends ServiceProvider
 {
@@ -34,9 +37,13 @@ class McpServerServiceProvider extends ServiceProvider
         $this->app->singleton(TokenPolicy::class);
         $this->app->singleton(McpRequestContext::class);
         $this->app->singleton(TokenRepository::class, EloquentTokenRepository::class);
+        $this->app->singleton(ReadRepository::class, FreeScoutReadRepository::class);
 
         $this->app->singleton(McpServerFactory::class, function ($app) {
-            return new McpServerFactory($app['config']->get('mcpserver', []));
+            return new McpServerFactory(
+                $app['config']->get('mcpserver', []),
+                $app->make(ReadToolCatalogue::class)
+            );
         });
 
         $this->app['router']->aliasMiddleware('mcpserver.auth', AuthenticateMcpToken::class);
