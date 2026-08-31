@@ -4,21 +4,25 @@ namespace Modules\McpServer\Http;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Modules\McpServer\OAuth\OAuthServerConfiguration;
 
 final class McpErrorResponseFactory
 {
+    private $oauth;
+
+    public function __construct(OAuthServerConfiguration $oauth)
+    {
+        $this->oauth = $oauth;
+    }
+
     public function unauthorized(Request $request, bool $invalidToken = true): Response
     {
         $challenge = 'Bearer realm="FreeScout MCP"';
         if ($invalidToken) {
             $challenge .= ', error="invalid_token"';
         }
-        if (filter_var(config('mcpserver.oauth.enabled', true), FILTER_VALIDATE_BOOLEAN)) {
-            try {
-                $challenge .= ', resource_metadata="'.rtrim((string) config('app.url'), '/').'/.well-known/oauth-protected-resource", scope="mcp:read"';
-            } catch (\Throwable $ignored) {
-                // Route discovery may not be available in isolated unit tests.
-            }
+        if ($this->oauth->enabled()) {
+            $challenge .= ', resource_metadata="'.$this->oauth->protectedResourceMetadataUrl().'", scope="mcp:read"';
         }
 
         return $this->jsonRpc($request, 401, -32001, 'Unauthorized', [

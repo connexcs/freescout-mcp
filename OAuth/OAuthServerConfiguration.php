@@ -40,7 +40,7 @@ final class OAuthServerConfiguration
     /** @return string[] */
     public function supportedScopes(): array
     {
-        return ['mcp:read', 'mcp:write'];
+        return ['mcp:read', 'mcp:write', 'offline_access'];
     }
 
     /** @return array<string, mixed> */
@@ -72,7 +72,7 @@ final class OAuthServerConfiguration
         return [
             'resource' => $this->resource(),
             'authorization_servers' => [$this->issuer()],
-            'scopes_supported' => $this->supportedScopes(),
+            'scopes_supported' => ['mcp:read', 'mcp:write'],
             'bearer_methods_supported' => ['header'],
             'resource_name' => 'FreeScout MCP Server',
         ];

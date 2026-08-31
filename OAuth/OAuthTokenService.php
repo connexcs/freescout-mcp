@@ -166,10 +166,10 @@ final class OAuthTokenService
     {
         $scopes = null === $scope || '' === trim($scope) ? ['mcp:read'] : preg_split('/\s+/', trim($scope));
         $scopes = array_values(array_unique(is_array($scopes) ? $scopes : []));
-        if ([] !== array_diff($scopes, ['mcp:read', 'mcp:write'])) {
-            throw new OAuthException('invalid_scope', 'Supported scopes are mcp:read and mcp:write.');
+        if ([] !== array_diff($scopes, ['mcp:read', 'mcp:write', 'offline_access'])) {
+            throw new OAuthException('invalid_scope', 'Supported scopes are mcp:read, mcp:write, and offline_access.');
         }
-        if (in_array('mcp:write', $scopes, true) && !in_array('mcp:read', $scopes, true)) {
+        if (!in_array('mcp:read', $scopes, true)) {
             array_unshift($scopes, 'mcp:read');
         }
 

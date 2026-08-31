@@ -80,7 +80,7 @@ final class ClientResolver
 
     private function validMetadataUrl(string $url): bool
     {
-        if (strlen($url) > 2048) {
+        if (strlen($url) > 2048 || 1 === preg_match('/[\x00-\x20\x7f]/', $url)) {
             return false;
         }
         $parts = parse_url($url);

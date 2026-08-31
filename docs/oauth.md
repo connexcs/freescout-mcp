@@ -23,7 +23,7 @@ Dynamic Client Registration is retained for Codex/Claude clients that have not m
 
 ## Scopes and token lifecycle
 
-`mcp:read` is the default and permits only the user's existing read capabilities. `mcp:write` also requires the global write-tool gates and the user's underlying FreeScout permissions. Requesting write automatically includes read.
+`mcp:read` is the default and permits only the user's existing read capabilities. `mcp:write` also requires the global write-tool gates and the user's underlying FreeScout permissions. Requesting write automatically includes read. The authorization-server metadata also advertises `offline_access` for clients that use it to request durable refresh capability; it is intentionally absent from protected-resource metadata and `401` challenges because it is not required to access the MCP resource.
 
 Authorization and token requests must carry the exact MCP endpoint as `resource`. Authorization requires S256 PKCE and redirects are compared as exact strings. Access tokens default to 3,600 seconds and refresh tokens to 2,592,000 seconds; configure the lifetimes with the corresponding environment variables. Refresh tokens rotate, scope cannot increase during refresh, and detected reuse revokes the whole family.
 

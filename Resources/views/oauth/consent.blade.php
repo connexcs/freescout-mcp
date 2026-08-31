@@ -18,6 +18,9 @@
                 @if (in_array('mcp:write', $scopes, true))
                     <li>{{ __('Create internal notes, update tickets, and create unsent draft replies when write tools are enabled') }}</li>
                 @endif
+                @if (in_array('offline_access', $scopes, true))
+                    <li>{{ __('Stay connected using rotating refresh tokens until this connection is revoked or expires') }}</li>
+                @endif
             </ul>
             <p>{{ __('FreeScout permissions continue to apply to every request. You can revoke this connection from the MCP Tokens page.') }}</p>
             <form method="POST" action="{{ route('mcpserver.oauth.decide') }}">

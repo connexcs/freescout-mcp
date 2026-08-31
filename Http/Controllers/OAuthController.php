@@ -57,10 +57,10 @@ final class OAuthController extends Controller
             if ('code' !== $request->query('response_type')) {
                 throw new OAuthException('unsupported_response_type', 'Only response_type=code is supported.');
             }
-            $clientId = (string) $request->query('client_id', '');
-            $redirectUri = (string) $request->query('redirect_uri', '');
-            $resource = (string) $request->query('resource', '');
-            $challenge = (string) $request->query('code_challenge', '');
+            $clientId = $this->stringValue($request->query('client_id', ''));
+            $redirectUri = $this->stringValue($request->query('redirect_uri', ''));
+            $resource = $this->stringValue($request->query('resource', ''));
+            $challenge = $this->stringValue($request->query('code_challenge', ''));
             if ('' === $clientId || '' === $redirectUri || '' === $resource || '' === $challenge
                 || 'S256' !== $request->query('code_challenge_method')
                 || 1 !== preg_match('/\A[A-Za-z0-9_-]{43}\z/', $challenge)
@@ -71,7 +71,8 @@ final class OAuthController extends Controller
             $client = $this->clients->resolve($clientId);
             $metadata = $this->clients->metadata($client);
             $this->validator->assertExactRedirect($metadata, $redirectUri);
-            $scopes = $this->tokens->validateScopes($request->query('scope'));
+            $scope = $request->query('scope');
+            $scopes = $this->tokens->validateScopes(null === $scope ? null : $this->stringValue($scope));
             $state = $request->query('state');
             if (null !== $state && (!is_string($state) || strlen($state) > 512)) {
                 throw new OAuthException('invalid_request', 'state is too long.');
@@ -106,7 +107,7 @@ final class OAuthController extends Controller
     public function decide(Request $request)
     {
         $this->requireEnabled();
-        $handle = (string) $request->input('request_handle', '');
+        $handle = $this->stringValue($request->input('request_handle', ''));
         $key = 'mcpserver_oauth.'.$handle;
         $pending = $request->session()->pull($key);
         if (!is_array($pending) || ($pending['created_at'] ?? 0) < time() - 600) {
@@ -139,23 +140,23 @@ final class OAuthController extends Controller
     {
         $this->requireEnabled();
         try {
-            $grant = (string) $request->input('grant_type', '');
-            $clientId = (string) $request->input('client_id', '');
-            $resource = (string) $request->input('resource', '');
+            $grant = $this->stringValue($request->input('grant_type', ''));
+            $clientId = $this->stringValue($request->input('client_id', ''));
+            $resource = $this->stringValue($request->input('resource', ''));
             if ('' === $clientId || '' === $resource || !hash_equals($this->configuration->resource(), $resource)) {
                 throw new OAuthException('invalid_request', 'client_id and the exact MCP resource are required.');
             }
             $this->clients->resolve($clientId);
             if ('authorization_code' === $grant) {
                 $result = $this->tokens->exchangeCode(
-                    (string) $request->input('code', ''), $clientId,
-                    (string) $request->input('redirect_uri', ''), $resource,
-                    (string) $request->input('code_verifier', '')
+                    $this->stringValue($request->input('code', '')), $clientId,
+                    $this->stringValue($request->input('redirect_uri', '')), $resource,
+                    $this->stringValue($request->input('code_verifier', ''))
                 );
             } elseif ('refresh_token' === $grant) {
                 $result = $this->tokens->refresh(
-                    (string) $request->input('refresh_token', ''), $clientId, $resource,
-                    $request->has('scope') ? (string) $request->input('scope') : null
+                    $this->stringValue($request->input('refresh_token', '')), $clientId, $resource,
+                    $request->has('scope') ? $this->stringValue($request->input('scope')) : null
                 );
             } else {
                 throw new OAuthException('unsupported_grant_type', 'Supported grants are authorization_code and refresh_token.');
@@ -170,7 +171,7 @@ final class OAuthController extends Controller
     public function revoke(Request $request)
     {
         $this->requireEnabled();
-        $this->tokens->revoke((string) $request->input('token', ''));
+        $this->tokens->revoke($this->stringValue($request->input('token', '')));
 
         return response('', 200)->header('Cache-Control', 'no-store');
     }
@@ -198,5 +199,11 @@ final class OAuthController extends Controller
         if (!$this->configuration->enabled() || !config('mcpserver.enabled', false)) {
             abort(404);
         }
+    }
+
+    /** @param mixed $value */
+    private function stringValue($value): string
+    {
+        return is_string($value) ? $value : '';
     }
 }
