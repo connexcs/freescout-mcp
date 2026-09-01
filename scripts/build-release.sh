@@ -5,6 +5,7 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 version="$(tr -d '[:space:]' < "$root_dir/version.txt")"
 build_dir="$root_dir/build"
 archive="$build_dir/McpServer-$version.zip"
+checksum="$archive.sha256"
 stage_dir="$(mktemp -d)"
 
 cleanup() {
@@ -16,6 +17,10 @@ mkdir -p "$stage_dir/McpServer" "$build_dir"
 
 tar \
     --exclude='.git' \
+    --exclude='.gitignore' \
+    --exclude='.env' \
+    --exclude='.env.*' \
+    --exclude='auth.json' \
     --exclude='vendor' \
     --exclude='build' \
     --exclude='.phpunit.cache' \
@@ -33,10 +38,16 @@ COMPOSER_ROOT_VERSION="$version" composer install \
     --prefer-dist \
     --optimize-autoloader
 
-rm -f -- "$archive"
+rm -f -- "$archive" "$checksum"
 (
     cd "$stage_dir"
     zip -qr "$archive" McpServer
 )
 
-printf 'Built %s\n' "$archive"
+"$root_dir/scripts/validate-release.sh" "$archive"
+(
+    cd "$build_dir"
+    sha256sum "$(basename "$archive")" > "$(basename "$checksum")"
+)
+
+printf 'Built %s and %s\n' "$archive" "$checksum"

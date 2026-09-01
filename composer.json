@@ -39,11 +39,13 @@
         "interop-config": "php scripts/client-config-smoke.php",
         "interop-inspector": "bash scripts/inspector-smoke.sh",
         "security-audit": "composer audit --locked --no-interaction",
+        "docs": "php scripts/docs-smoke.php",
         "check": [
             "composer validate --no-check-publish",
             "@security-audit",
             "@lint",
             "@test",
+            "@docs",
             "@interop-config",
             "@smoke"
         ]

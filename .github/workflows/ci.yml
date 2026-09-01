@@ -16,7 +16,7 @@ jobs:
         php: ['8.1', '8.2', '8.3', '8.4']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
@@ -27,13 +27,33 @@ jobs:
   inspector:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - run: composer install --no-interaction --prefer-dist
       - run: composer interop-inspector
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: scripts/build-release.sh
+      - run: git clone --depth 1 https://github.com/freescout-help-desk/freescout.git /tmp/freescout-package-test
+      - run: scripts/freescout-package-smoke.sh "$(find build -maxdepth 1 -name 'McpServer-*.zip' -print -quit)" /tmp/freescout-package-test
+      - uses: actions/upload-artifact@v7
+        with:
+          name: McpServer-release
+          path: |
+            build/McpServer-*.zip
+            build/McpServer-*.zip.sha256
+          if-no-files-found: error

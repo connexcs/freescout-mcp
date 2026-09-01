@@ -79,11 +79,13 @@ Implementation note: the module is a local OAuth 2.1 authorization server and re
 
 Acceptance: the security matrix and automated checks pass. MCP Inspector 2.4.0 is recorded as a client limitation because it still sends the removed initialization lifecycle; the server does not weaken modern-only protocol handling to accommodate it. See `phase-6-security-interoperability.md`.
 
-## Phase 7 — documentation and release (next)
+## Phase 7 — documentation and release (complete)
 
 - Produce installation/upgrade, reverse-proxy, token, tool/scope, Knowledge Base, troubleshooting, and security documentation.
 - Include tested Codex `config.toml` and Claude Code `.mcp.json` examples.
 - Build and validate a versioned module ZIP with production dependencies.
+
+Acceptance: the documentation index covers installation, upgrade, client authentication, reverse proxies, tokens, tools/scopes, Knowledge Base compatibility, troubleshooting, security, and release operations. Documentation links and version consistency are tested. The `1.0.0` ZIP contains only production files and dependencies, passes autoload and FreeScout dependency-runtime checks, and is accompanied by a SHA-256 checksum.
 
 ## Phase 8 — OAuth (complete ahead of sequence)
 
@@ -95,3 +97,15 @@ The OAuth deliverables originally assigned to this phase were implemented and te
 - Test the supported PHP matrix and the latest supported FreeScout release.
 - Run dependency audit, protocol smoke tests, permission regression tests, and release-archive validation.
 - Document every schema migration, configuration default, and security-relevant behavior change.
+
+## Version 1.0 definition of done
+
+- A user can generate and revoke a personal MCP token.
+- Codex and Claude Code have tested environment-backed bearer configurations for `/mcp`.
+- OAuth discovery, consent, PKCE, refresh rotation, and revocation are implemented for clients that support the modern lifecycle.
+- Every tool evaluates current FreeScout user, mailbox, assigned-only, and ticket permissions directly in the database.
+- Read and write behavior follows the equivalent FreeScout domain behavior; draft creation never sends.
+- Revocation and disabled/deleted-account state take effect on the next request.
+- Knowledge Base tools appear only when an active compatible mailbox-scoped schema is detected.
+- Installation and migrations do not modify FreeScout core.
+- PHP matrix, protocol, security, permission, dependency, documentation, client-config, and packaged-install gates pass.

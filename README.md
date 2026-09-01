@@ -4,7 +4,7 @@ A native FreeScout module that exposes FreeScout capabilities through the Model 
 
 ## Current status
 
-Phases 0 through 6 are complete: the repository contains a loadable FreeScout module, a modern stateless HTTP MCP endpoint, per-user personal and OAuth authentication, permission-aware read tools, opt-in audited mutation tools, and security/interoperability qualification.
+Version 1.0.0 is the first stable release. Phases 0 through 8 are complete, with OAuth delivered ahead of its original sequence. The module provides a modern stateless HTTP endpoint, per-user personal and OAuth authentication, permission-aware read tools, optional Knowledge Base access, and opt-in audited mutation tools.
 
 The endpoint is disabled by default. Once enabled, every POST requires a valid personal or audience-bound OAuth access token belonging to an active, policy-eligible FreeScout user.
 
@@ -16,7 +16,17 @@ The endpoint is disabled by default. Once enabled, every POST requires a valid p
 - Official PHP MCP SDK `mcp/sdk` 0.8.1
 - Codex and modern Claude clients that support the `2026-07-28` lifecycle
 
-See [the phase 0 compatibility record](docs/phase-0-compatibility.md) for the dependency and transport decisions, and the [implementation plan](docs/implementation-plan.md) for subsequent phases and release gates.
+See [the documentation index](docs/index.md), [phase 0 compatibility record](docs/phase-0-compatibility.md), and [implementation plan](docs/implementation-plan.md).
+
+## Documentation
+
+- [Installation and upgrade](docs/installation.md)
+- [Server configuration](docs/configuration.md)
+- [Codex, Claude Code, token, and OAuth setup](docs/clients.md)
+- [Reverse-proxy deployment](docs/reverse-proxy.md)
+- [Tool and scope reference](docs/tools-and-scopes.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Security design](docs/security.md)
 
 ## Development
 
@@ -59,6 +69,8 @@ APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: \
 5. Keep `MCP_SERVER_ENABLED=false` until an authenticated development test is required.
 
 When explicitly enabled, the endpoint is `<FREESCOUT_URL>/mcp` (including FreeScout's configured subdirectory, if any).
+
+For the production ZIP, ownership, migrations, verification, upgrades, rollback, and uninstall guidance, use [Installation and upgrade](docs/installation.md).
 
 The host allowlist defaults to the hostname in `APP_URL`. Extra hosts and browser origins are comma-separated:
 
@@ -123,7 +135,7 @@ There is deliberately no send-reply tool. Creating a draft never sends mail or m
 
 ## Packaging
 
-Run `scripts/build-release.sh`. It creates `build/McpServer-<version>.zip` containing production Composer dependencies, ready to unpack into FreeScout's `Modules` directory.
+Run `scripts/build-release.sh`. It creates and validates `build/McpServer-<version>.zip` with production Composer dependencies and a matching `.sha256` checksum, ready to unpack into FreeScout's `Modules` directory. See [the release process](docs/release.md).
 
 ## Interoperability qualification
 
@@ -138,7 +150,7 @@ See [the Phase 6 qualification record](docs/phase-6-security-interoperability.md
 - Phase 4 (complete): opt-in note, ticket-update, and unsent draft tools with idempotency and audit logging
 - Phase 5 (complete): OAuth 2.1 discovery, browser consent, CIMD/DCR clients, PKCE, scoped access, refresh rotation, and revocation
 - Phase 6 (complete): role and token-state security matrix, enumeration resistance, request/output bounds, audit redaction, and client/protocol interoperability probes
-- Phase 7 (next): installation, client, proxy, security, troubleshooting, and release documentation plus the versioned production ZIP
+- Phase 7 (complete): installation, client, proxy, security, troubleshooting, and release documentation plus the validated versioned production ZIP
 - Phase 8 (delivered early in Phase 5): OAuth authorization, consent, PKCE, rotation, revocation, CIMD/DCR, and FreeScout-session SSO
 
 ## License

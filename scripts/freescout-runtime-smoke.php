@@ -1,7 +1,7 @@
 <?php
 
 if (!isset($argv[1])) {
-    fwrite(STDERR, "Usage: php scripts/freescout-runtime-smoke.php /path/to/freescout\n");
+    fwrite(STDERR, "Usage: php scripts/freescout-runtime-smoke.php /path/to/freescout [/path/to/McpServer]\n");
     exit(2);
 }
 
@@ -22,7 +22,12 @@ if (!class_exists('Helper', false)) {
 // Force the same PSR-11 v1 interface FreeScout loads during application boot.
 interface_exists(\Psr\Container\ContainerInterface::class);
 
-require dirname(__DIR__).'/vendor/autoload.php';
+$moduleRoot = isset($argv[2]) ? realpath($argv[2]) : dirname(__DIR__);
+if (false === $moduleRoot || !is_file($moduleRoot.'/vendor/autoload.php')) {
+    fwrite(STDERR, "The supplied MCP module has no production autoloader.\n");
+    exit(2);
+}
+require $moduleRoot.'/vendor/autoload.php';
 
 use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Server\Stateless\RequestMeta;
