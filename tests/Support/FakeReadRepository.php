@@ -38,4 +38,19 @@ final class FakeReadRepository implements ReadRepository
     {
         return ['items' => [], 'next_cursor' => null];
     }
+
+    public function tagsAvailable(): bool
+    {
+        return true;
+    }
+
+    public function tags(string $query, int $limit, ?string $cursor): array
+    {
+        return ['items' => [['id' => 1, 'name' => 'priority']], 'next_cursor' => null];
+    }
+
+    public function ticketTags(int $ticketId): array
+    {
+        return [['id' => 1, 'name' => 'priority']];
+    }
 }
