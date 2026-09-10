@@ -7,6 +7,8 @@ use App\Customer;
 use App\Mailbox;
 use App\Thread;
 use App\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Mcp\Exception\ToolCallException;
 use Modules\McpServer\Contracts\ReadRepository;
 use Modules\McpServer\Security\McpRequestContext;
@@ -16,17 +18,12 @@ final class FreeScoutReadRepository implements ReadRepository
 {
     private $context;
 
-    public function __construct(McpRequestContext $context)
-    {
-        $this->context = $context;
-    }
+    public function __construct(McpRequestContext $context) { $this->context = $context; }
 
     public function ticket(int $id): ?array
     {
         $conversation = $this->conversationQuery()->with(['mailbox', 'customer.emails', 'user'])->where('conversations.id', $id)->first();
-        if (null === $conversation || !$this->user()->can('view', $conversation)) {
-            return null;
-        }
+        if (null === $conversation || !$this->user()->can('view', $conversation)) { return null; }
         return $this->serializeTicket($conversation);
     }
 
@@ -34,9 +31,7 @@ final class FreeScoutReadRepository implements ReadRepository
     {
         $query = Thread::query()->with(['created_by_user', 'created_by_customer', 'attachments'])->where('conversation_id', $id)->where('state', Thread::STATE_PUBLISHED)->orderBy('id', 'desc');
         $this->applyCursor($query, $cursor);
-        $rows = $query->limit($limit + 1)->get();
-        $hasMore = $rows->count() > $limit;
-        $rows = $rows->take($limit);
+        $rows = $query->limit($limit + 1)->get(); $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
         return ['items' => $rows->map(function ($thread) { return $this->serializeThread($thread); })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
 
@@ -44,16 +39,12 @@ final class FreeScoutReadRepository implements ReadRepository
     {
         $builder = $this->conversationQuery()->with(['mailbox', 'customer.emails', 'user']);
         if ('' !== $query) {
-            $like = '%'.mb_strtolower($query).'%';
-            $operator = \Helper::isPgSql() ? 'ilike' : 'like';
+            $like = '%'.mb_strtolower($query).'%'; $operator = \Helper::isPgSql() ? 'ilike' : 'like';
             $builder->where(function ($where) use ($query, $like, $operator) {
                 $where->where('subject', $operator, $like)->orWhere('customer_email', $operator, $like)->orWhere('preview', $operator, $like)
-                    ->orWhereHas('customer', function ($customers) use ($like, $operator) {
-                        $customers->where('first_name', $operator, $like)->orWhere('last_name', $operator, $like)->orWhere('company', $operator, $like)->orWhereHas('emails', function ($emails) use ($like, $operator) { $emails->where('email', $operator, $like); });
-                    })->orWhereHas('threads', function ($threads) use ($like, $operator) { $threads->where('state', Thread::STATE_PUBLISHED)->where('body', $operator, $like); });
-                if (ctype_digit($query)) {
-                    $where->orWhere('conversations.'.Conversation::numberFieldName(), (int) $query);
-                }
+                    ->orWhereHas('customer', function ($customers) use ($like, $operator) { $customers->where('first_name', $operator, $like)->orWhere('last_name', $operator, $like)->orWhere('company', $operator, $like)->orWhereHas('emails', function ($emails) use ($like, $operator) { $emails->where('email', $operator, $like); }); })
+                    ->orWhereHas('threads', function ($threads) use ($like, $operator) { $threads->where('state', Thread::STATE_PUBLISHED)->where('body', $operator, $like); });
+                if (ctype_digit($query)) { $where->orWhere('conversations.'.Conversation::numberFieldName(), (int) $query); }
             });
         }
         if (isset($filters['mailbox_id'])) { $builder->where('mailbox_id', $filters['mailbox_id']); }
@@ -67,20 +58,18 @@ final class FreeScoutReadRepository implements ReadRepository
         if (isset($filters['tag']) && $this->tagsAvailable()) {
             $tag = mb_strtolower($filters['tag']);
             $builder->whereExists(function ($sub) use ($tag) {
-                $sub->select(\DB::raw(1))->from('conversation_tag')->join('tags', 'tags.id', '=', 'conversation_tag.tag_id')->whereColumn('conversation_tag.conversation_id', 'conversations.id')->whereRaw('LOWER(tags.name) = ?', [$tag]);
+                $sub->select(DB::raw(1))->from('conversation_tag')->join('tags', 'tags.id', '=', 'conversation_tag.tag_id')->whereColumn('conversation_tag.conversation_id', 'conversations.id')->whereRaw('LOWER(tags.name) = ?', [$tag]);
             });
         }
         $this->applyCursor($builder, $cursor);
         $rows = $builder->orderBy('conversations.id', 'desc')->limit(($limit + 1) * 5)->get()->filter(function ($conversation) { return $this->user()->can('view', $conversation); })->values()->take($limit + 1);
-        $hasMore = $rows->count() > $limit;
-        $rows = $rows->take($limit);
+        $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
         return ['items' => $rows->map(function ($conversation) { return $this->serializeTicket($conversation); })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
 
     public function mailboxes(int $limit, ?string $cursor): array
     {
-        $builder = Mailbox::query()->whereIn('id', $this->mailboxIds())->orderBy('id', 'desc');
-        $this->applyCursor($builder, $cursor);
+        $builder = Mailbox::query()->whereIn('id', $this->mailboxIds())->orderBy('id', 'desc'); $this->applyCursor($builder, $cursor);
         $rows = $builder->limit($limit + 1)->get(); $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
         return ['items' => $rows->map(function ($mailbox) { return ['id' => (int) $mailbox->id, 'name' => (string) $mailbox->name, 'email' => (string) $mailbox->email]; })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
@@ -99,82 +88,72 @@ final class FreeScoutReadRepository implements ReadRepository
     {
         $actor = $this->user(); $builder = User::query()->where('status', User::STATUS_ACTIVE)->orderBy('id', 'desc');
         if (!$actor->isAdmin()) { $builder->where('id', $actor->id); }
-        if ('' !== $query) {
-            $like = '%'.mb_strtolower($query).'%'; $operator = \Helper::isPgSql() ? 'ilike' : 'like';
-            $builder->where(function ($users) use ($like, $operator) { $users->where('first_name', $operator, $like)->orWhere('last_name', $operator, $like)->orWhere('email', $operator, $like); });
-        }
+        if ('' !== $query) { $like = '%'.mb_strtolower($query).'%'; $operator = \Helper::isPgSql() ? 'ilike' : 'like'; $builder->where(function ($users) use ($like, $operator) { $users->where('first_name', $operator, $like)->orWhere('last_name', $operator, $like)->orWhere('email', $operator, $like); }); }
         $this->applyCursor($builder, $cursor); $rows = $builder->limit($limit + 1)->get(); $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
         return ['items' => $rows->map(function ($user) { return ['id' => (int) $user->id, 'name' => trim((string) $user->getFullName()), 'email' => (string) $user->email]; })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
 
     public function tagsAvailable(): bool
     {
-        return \Schema::hasTable('tags') && \Schema::hasTable('conversation_tag') && \Schema::hasColumn('tags', 'id') && \Schema::hasColumn('tags', 'name') && \Schema::hasColumn('conversation_tag', 'conversation_id') && \Schema::hasColumn('conversation_tag', 'tag_id');
+        return Schema::hasTable('tags') && Schema::hasTable('conversation_tag') && Schema::hasColumn('tags', 'id') && Schema::hasColumn('tags', 'name') && Schema::hasColumn('conversation_tag', 'conversation_id') && Schema::hasColumn('conversation_tag', 'tag_id');
     }
 
     public function ticketTags(int $ticketId): array
     {
         if (!$this->tagsAvailable()) { return []; }
-        return \DB::table('tags')->join('conversation_tag', 'conversation_tag.tag_id', '=', 'tags.id')->where('conversation_tag.conversation_id', $ticketId)->orderBy('tags.name')->get(['tags.id', 'tags.name', 'tags.color', 'tags.counter'])->map(function ($tag) {
-            return ['id' => (int) $tag->id, 'name' => (string) $tag->name, 'color' => isset($tag->color) ? (int) $tag->color : null, 'counter' => isset($tag->counter) ? (int) $tag->counter : null];
-        })->all();
+        return $this->tagSelect(DB::table('tags')->join('conversation_tag', 'conversation_tag.tag_id', '=', 'tags.id')->where('conversation_tag.conversation_id', $ticketId))->orderBy('tags.name')->get()->map(function ($tag) { return $this->serializeTag($tag); })->all();
     }
 
     public function tags(string $query, int $limit, ?string $cursor): array
     {
         if (!$this->tagsAvailable()) { throw new ToolCallException('Tags module is unavailable.'); }
-        $builder = \DB::table('tags')->select('tags.id', 'tags.name', 'tags.color', 'tags.counter')->whereExists(function ($sub) {
-            $sub->select(\DB::raw(1))->from('conversation_tag')->join('conversations', 'conversations.id', '=', 'conversation_tag.conversation_id')->whereColumn('conversation_tag.tag_id', 'tags.id')->whereIn('conversations.mailbox_id', $this->mailboxIds());
+        $builder = $this->tagSelect(DB::table('tags'))->whereExists(function ($sub) {
+            $sub->select(DB::raw(1))->from('conversation_tag')->join('conversations', 'conversations.id', '=', 'conversation_tag.conversation_id')->whereColumn('conversation_tag.tag_id', 'tags.id')->whereIn('conversations.mailbox_id', $this->mailboxIds());
             $user = $this->user();
-            if (!$user->isAdmin() && $user->canSeeOnlyAssignedConversations()) {
-                $sub->where(function ($assigned) use ($user) { $assigned->where('conversations.user_id', $user->id)->orWhere('conversations.created_by_user_id', $user->id); });
-            }
+            if (!$user->isAdmin() && $user->canSeeOnlyAssignedConversations()) { $sub->where(function ($assigned) use ($user) { $assigned->where('conversations.user_id', $user->id)->orWhere('conversations.created_by_user_id', $user->id); }); }
         });
         if ('' !== $query) { $builder->whereRaw('LOWER(tags.name) LIKE ?', ['%'.mb_strtolower($query).'%']); }
         try { $cursorId = PageCursor::decode($cursor); } catch (\InvalidArgumentException $exception) { throw new ToolCallException($exception->getMessage()); }
         if (null !== $cursorId) { $builder->where('tags.id', '<', $cursorId); }
         $rows = $builder->orderBy('tags.id', 'desc')->limit($limit + 1)->get(); $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
-        return ['items' => $rows->map(function ($tag) { return ['id' => (int) $tag->id, 'name' => (string) $tag->name, 'color' => isset($tag->color) ? (int) $tag->color : null, 'counter' => isset($tag->counter) ? (int) $tag->counter : null]; })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
+        return ['items' => $rows->map(function ($tag) { return $this->serializeTag($tag); })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
 
-    private function conversationQuery()
+    private function tagSelect($query)
     {
-        $query = Conversation::query(); $this->applyConversationAuthorization($query); return $query;
+        $columns = ['tags.id', 'tags.name'];
+        if (Schema::hasColumn('tags', 'color')) { $columns[] = 'tags.color'; }
+        if (Schema::hasColumn('tags', 'counter')) { $columns[] = 'tags.counter'; }
+        return $query->select($columns);
     }
 
+    private function serializeTag($tag): array
+    {
+        return ['id' => (int) $tag->id, 'name' => (string) $tag->name, 'color' => isset($tag->color) ? (int) $tag->color : null, 'counter' => isset($tag->counter) ? (int) $tag->counter : null];
+    }
+
+    private function conversationQuery() { $query = Conversation::query(); $this->applyConversationAuthorization($query); return $query; }
     private function applyConversationAuthorization($query): void
     {
         $user = $this->user(); $query->whereIn('mailbox_id', $this->mailboxIds());
-        if (!$user->isAdmin() && $user->canSeeOnlyAssignedConversations()) {
-            $query->where(function ($assigned) use ($user) { $assigned->where('user_id', $user->id)->orWhere('created_by_user_id', $user->id); });
-        }
+        if (!$user->isAdmin() && $user->canSeeOnlyAssignedConversations()) { $query->where(function ($assigned) use ($user) { $assigned->where('user_id', $user->id)->orWhere('created_by_user_id', $user->id); }); }
     }
-
     private function mailboxIds(): array { return array_map('intval', $this->user()->mailboxesIdsCanView()); }
-
     private function applyCursor($query, ?string $cursor): void
     {
         try { $id = PageCursor::decode($cursor); } catch (\InvalidArgumentException $exception) { throw new ToolCallException($exception->getMessage()); }
         if (null !== $id) { $query->where($query->getModel()->getTable().'.id', '<', $id); }
     }
-
-    private function user()
-    {
-        $user = $this->context->user(); if (null === $user) { throw new \LogicException('MCP read attempted without an authenticated user.'); } return $user;
-    }
+    private function user() { $user = $this->context->user(); if (null === $user) { throw new \LogicException('MCP read attempted without an authenticated user.'); } return $user; }
 
     private function serializeTicket($conversation): array
     {
-        return [
-            'id' => (int) $conversation->id, 'number' => (int) $conversation->number, 'subject' => (string) $conversation->subject,
-            'status' => $conversation->getStatusName(), 'type' => $conversation->getTypeName(),
+        return ['id' => (int) $conversation->id, 'number' => (int) $conversation->number, 'subject' => (string) $conversation->subject, 'status' => $conversation->getStatusName(), 'type' => $conversation->getTypeName(),
             'mailbox' => $conversation->mailbox ? ['id' => (int) $conversation->mailbox->id, 'name' => (string) $conversation->mailbox->name] : null,
             'customer' => $conversation->customer ? ['id' => (int) $conversation->customer->id, 'name' => trim((string) $conversation->customer->getFullName()), 'email' => (string) $conversation->customer_email] : null,
             'assignee' => $conversation->user ? ['id' => (int) $conversation->user->id, 'name' => trim((string) $conversation->user->getFullName())] : null,
-            'tags' => $this->ticketTags((int) $conversation->id),
-            'preview' => (string) $conversation->preview, 'thread_count' => (int) $conversation->threads_count, 'has_attachments' => (bool) $conversation->has_attachments,
-            'created_at' => $this->date($conversation->created_at), 'updated_at' => $this->date($conversation->updated_at), 'last_reply_at' => $this->date($conversation->last_reply_at),
-        ];
+            'tags' => $this->ticketTags((int) $conversation->id), 'preview' => (string) $conversation->preview, 'thread_count' => (int) $conversation->threads_count, 'has_attachments' => (bool) $conversation->has_attachments,
+            'created_at' => $this->date($conversation->created_at), 'updated_at' => $this->date($conversation->updated_at), 'last_reply_at' => $this->date($conversation->last_reply_at)];
     }
 
     private function serializeThread($thread): array
@@ -186,11 +165,6 @@ final class FreeScoutReadRepository implements ReadRepository
         return ['id' => (int) $thread->id, 'type' => Thread::$types[$thread->type] ?? 'unknown', 'body' => $body, 'from' => $thread->from ?: null, 'to' => $this->addressList($thread->to), 'cc' => $this->addressList($thread->cc), 'creator' => $creator,
             'attachments' => $thread->attachments->map(function ($attachment) { return ['id' => (int) $attachment->id, 'name' => (string) $attachment->file_name, 'mime_type' => $attachment->mime_type ?: null, 'size' => isset($attachment->size) ? (int) $attachment->size : null]; })->values()->all(), 'created_at' => $this->date($thread->created_at)];
     }
-
-    private function addressList($value): array
-    {
-        if (is_array($value)) { return array_values($value); } $decoded = json_decode((string) $value, true); return is_array($decoded) ? array_values($decoded) : [];
-    }
-
+    private function addressList($value): array { if (is_array($value)) { return array_values($value); } $decoded = json_decode((string) $value, true); return is_array($decoded) ? array_values($decoded) : []; }
     private function date($value): ?string { return null === $value ? null : $value->toIso8601String(); }
 }
