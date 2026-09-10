@@ -21,4 +21,12 @@ interface ReadRepository
 
     /** @return array<string, mixed> */
     public function users(string $query, int $limit, ?string $cursor): array;
+
+    public function tagsAvailable(): bool;
+
+    /** @return array<string, mixed> */
+    public function tags(string $query, int $limit, ?string $cursor): array;
+
+    /** @return array<int, array<string, mixed>> */
+    public function ticketTags(int $ticketId): array;
 }
