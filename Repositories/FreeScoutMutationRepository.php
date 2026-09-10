@@ -3,7 +3,9 @@
 namespace Modules\McpServer\Repositories;
 
 use App\Conversation;
+use App\Customer;
 use App\Folder;
+use App\Mailbox;
 use App\Thread;
 use Mcp\Exception\ToolCallException;
 use Modules\McpServer\Contracts\MutationRepository;
@@ -41,16 +43,10 @@ final class FreeScoutMutationRepository implements MutationRepository
     {
         $conversation = $this->authorizedConversation($ticketId);
         $changed = [];
-        $statusId = null;
+        $statusId = $this->statusId($status);
 
-        if (null !== $status) {
-            $statusId = array_search($status, Conversation::$statuses, true);
-            if (false === $statusId) {
-                throw new ToolCallException('Invalid status.');
-            }
-            if ((int) $conversation->status === (int) $statusId) {
-                throw new ToolCallException('Status already set.');
-            }
+        if (null !== $statusId && (int) $conversation->status === $statusId) {
+            throw new ToolCallException('Status already set.');
         }
 
         if (null !== $assigneeId) {
@@ -65,7 +61,7 @@ final class FreeScoutMutationRepository implements MutationRepository
         }
 
         if (null !== $statusId) {
-            $conversation->changeStatus((int) $statusId, $this->user());
+            $conversation->changeStatus($statusId, $this->user());
             $changed['status'] = $status;
             $conversation->refresh();
         }
@@ -120,10 +116,195 @@ final class FreeScoutMutationRepository implements MutationRepository
         ];
     }
 
+    public function sendReply(int $ticketId, string $body, array $cc, array $bcc, ?string $status): array
+    {
+        $conversation = $this->authorizedConversation($ticketId);
+        if ('' === trim((string) $conversation->customer_email) || null === $conversation->customer) {
+            throw new ToolCallException('Ticket has no reply recipient.');
+        }
+
+        $statusId = $this->statusId($status);
+        $thread = Thread::createExtended([
+            'type' => Thread::TYPE_MESSAGE,
+            'body' => $this->plainTextHtml($body),
+            'created_by_user_id' => $this->user()->id,
+            'user_id' => $conversation->user_id,
+            'cc' => $cc,
+            'bcc' => $bcc,
+            'status' => $statusId,
+        ], $conversation, $conversation->customer, true);
+
+        if (!$thread) {
+            throw new \RuntimeException('FreeScout did not create the reply thread.');
+        }
+
+        // createExtended uses the customer's main email. Preserve the conversation's
+        // selected reply address, which may intentionally differ from that main address.
+        $thread->setTo($conversation->customer_email);
+        $thread->save();
+        $conversation->refresh();
+
+        return [
+            'ticket_id' => (int) $conversation->id,
+            'thread_id' => (int) $thread->id,
+            'state' => 'published',
+            'sent' => true,
+            'status' => Conversation::$statuses[(int) $conversation->status] ?? (string) $conversation->status,
+        ];
+    }
+
+    public function createTicket(int $mailboxId, string $subject, ?int $customerId, ?string $customerEmail, string $body, ?int $assigneeId, ?string $status): array
+    {
+        $mailbox = Mailbox::find($mailboxId);
+        if (null === $mailbox || !$this->user()->can('view', $mailbox)) {
+            throw new ToolCallException('Mailbox not found.');
+        }
+
+        $customer = null;
+        if (null !== $customerId) {
+            $customer = Customer::find($customerId);
+            if (null === $customer) {
+                throw new ToolCallException('Customer not found.');
+            }
+            if (null !== $customerEmail && !in_array(mb_strtolower($customerEmail), array_map('mb_strtolower', $customer->emails->pluck('email')->all()), true)) {
+                throw new ToolCallException('Customer email does not belong to customer.');
+            }
+            $customerEmail = $customerEmail ?: $customer->getMainEmail();
+        } else {
+            if (null === $customerEmail) {
+                throw new ToolCallException('Provide customer_id or customer_email.');
+            }
+            $customer = Customer::getByEmail($customerEmail);
+            if (null === $customer) {
+                $customer = Customer::create($customerEmail);
+            }
+        }
+        if (!$customer || !$customerEmail) {
+            throw new ToolCallException('Customer not found.');
+        }
+
+        if (null !== $assigneeId && -1 !== $assigneeId && !$mailbox->userHasAccess($assigneeId)) {
+            throw new ToolCallException('Assignee is not available for this mailbox.');
+        }
+
+        $statusId = $this->statusId($status) ?? Conversation::STATUS_PENDING;
+        $conversation = new Conversation();
+        $conversation->type = Conversation::TYPE_EMAIL;
+        $conversation->subject = $subject;
+        $conversation->mailbox_id = $mailbox->id;
+        $conversation->customer_id = $customer->id;
+        $conversation->customer_email = $customerEmail;
+        $conversation->user_id = (null === $assigneeId || -1 === $assigneeId) ? null : $assigneeId;
+        $conversation->status = $statusId;
+        $conversation->state = Conversation::STATE_PUBLISHED;
+        $conversation->source_via = Conversation::PERSON_USER;
+        $conversation->source_type = Conversation::SOURCE_TYPE_WEB;
+        $conversation->created_by_user_id = $this->user()->id;
+        $conversation->setPreview($this->plainTextHtml($body));
+        $conversation->updateFolder();
+        $conversation->save();
+
+        $thread = Thread::createExtended([
+            'type' => Thread::TYPE_MESSAGE,
+            'body' => $this->plainTextHtml($body),
+            'created_by_user_id' => $this->user()->id,
+            'user_id' => $conversation->user_id,
+            'status' => $statusId,
+        ], $conversation, $customer, true);
+        if (!$thread) {
+            throw new \RuntimeException('FreeScout did not create the initial ticket thread.');
+        }
+        $thread->setTo($customerEmail);
+        $thread->save();
+        $conversation->refresh();
+
+        return [
+            'ticket_id' => (int) $conversation->id,
+            'number' => (int) $conversation->number,
+            'thread_id' => (int) $thread->id,
+            'created' => true,
+            'sent' => true,
+            'status' => Conversation::$statuses[(int) $conversation->status] ?? (string) $conversation->status,
+        ];
+    }
+
+    public function tagsAvailable(): bool
+    {
+        return \Schema::hasTable('tags') && \Schema::hasTable('conversation_tag')
+            && \Schema::hasColumn('tags', 'id') && \Schema::hasColumn('tags', 'name')
+            && \Schema::hasColumn('conversation_tag', 'conversation_id') && \Schema::hasColumn('conversation_tag', 'tag_id');
+    }
+
+    public function setTicketTags(int $ticketId, array $tags): array
+    {
+        $conversation = $this->authorizedConversation($ticketId);
+        if (!$this->tagsAvailable()) {
+            throw new ToolCallException('Tags module is unavailable.');
+        }
+
+        $normalized = [];
+        foreach ($tags as $tag) {
+            $name = trim($tag);
+            if ('' !== $name) {
+                $normalized[mb_strtolower($name)] = $name;
+            }
+        }
+        $normalized = array_values($normalized);
+
+        $tagIds = [];
+        foreach ($normalized as $name) {
+            $existing = \DB::table('tags')->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->first();
+            if ($existing) {
+                $tagIds[] = (int) $existing->id;
+                continue;
+            }
+            $values = ['name' => $name];
+            if (\Schema::hasColumn('tags', 'counter')) {
+                $values['counter'] = 0;
+            }
+            if (\Schema::hasColumn('tags', 'color')) {
+                $values['color'] = 1;
+            }
+            if (\Schema::hasColumn('tags', 'created_at')) {
+                $values['created_at'] = date('Y-m-d H:i:s');
+            }
+            if (\Schema::hasColumn('tags', 'updated_at')) {
+                $values['updated_at'] = date('Y-m-d H:i:s');
+            }
+            $tagIds[] = (int) \DB::table('tags')->insertGetId($values);
+        }
+
+        $current = \DB::table('conversation_tag')->where('conversation_id', $conversation->id)->pluck('tag_id')->map(function ($id) { return (int) $id; })->all();
+        $add = array_values(array_diff($tagIds, $current));
+        $remove = array_values(array_diff($current, $tagIds));
+
+        foreach ($remove as $tagId) {
+            \DB::table('conversation_tag')->where('conversation_id', $conversation->id)->where('tag_id', $tagId)->delete();
+            if (\Schema::hasColumn('tags', 'counter')) {
+                \DB::table('tags')->where('id', $tagId)->where('counter', '>', 0)->decrement('counter');
+            }
+        }
+        foreach ($add as $tagId) {
+            \DB::table('conversation_tag')->insert(['conversation_id' => $conversation->id, 'tag_id' => $tagId]);
+            if (\Schema::hasColumn('tags', 'counter')) {
+                \DB::table('tags')->where('id', $tagId)->increment('counter');
+            }
+        }
+
+        \Eventy::action('conversation.tags_changed', $conversation, $tagIds, $current, $this->user());
+
+        return [
+            'ticket_id' => (int) $conversation->id,
+            'tags' => \DB::table('tags')->whereIn('id', $tagIds)->orderBy('name')->get(['id', 'name'])->map(function ($tag) {
+                return ['id' => (int) $tag->id, 'name' => (string) $tag->name];
+            })->all(),
+        ];
+    }
+
     /** @return object */
     private function authorizedConversation(int $ticketId)
     {
-        $conversation = Conversation::with('mailbox')->where('id', $ticketId)->lockForUpdate()->first();
+        $conversation = Conversation::with(['mailbox', 'customer.emails'])->where('id', $ticketId)->lockForUpdate()->first();
         if (null === $conversation || !$this->user()->can('update', $conversation)) {
             throw new ToolCallException('Ticket not found.');
         }
@@ -140,6 +321,19 @@ final class FreeScoutMutationRepository implements MutationRepository
         }
 
         return $user;
+    }
+
+    private function statusId(?string $status): ?int
+    {
+        if (null === $status) {
+            return null;
+        }
+        $id = array_search($status, Conversation::$statuses, true);
+        if (false === $id) {
+            throw new ToolCallException('Invalid status.');
+        }
+
+        return (int) $id;
     }
 
     private function plainTextHtml(string $body): string
