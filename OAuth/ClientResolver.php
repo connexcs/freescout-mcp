@@ -105,17 +105,24 @@ final class ClientResolver
         }
 
         $answers = dns_get_record($host, DNS_A | DNS_AAAA);
-        $resolve = [];
+        $addresses = [];
         foreach (is_array($answers) ? $answers : [] as $answer) {
             $ip = $answer['ip'] ?? $answer['ipv6'] ?? null;
             if (!is_string($ip) || false === filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                 throw new OAuthException('invalid_client', 'Client metadata resolved to a non-public address.');
             }
-            $resolve[] = $host.':443:'.(false !== strpos($ip, ':') ? '['.$ip.']' : $ip);
+            $addresses[] = false !== strpos($ip, ':') ? '['.$ip.']' : $ip;
         }
-        if ([] === $resolve) {
+        if ([] === $addresses) {
             throw new OAuthException('invalid_client', 'Client metadata hostname could not be resolved.');
         }
+
+        // curl keys CURLOPT_RESOLVE entries by "host:port", so one entry per
+        // address makes the last record win instead of adding a fallback. A host
+        // with both A and AAAA records is therefore pinned to the AAAA address
+        // alone, which fails outright on IPv4-only servers. All addresses have to
+        // ride in a single comma-separated entry so curl can fall back across them.
+        $resolve = [$host.':443:'.implode(',', $addresses)];
 
         $body = '';
         $handle = curl_init($url);
