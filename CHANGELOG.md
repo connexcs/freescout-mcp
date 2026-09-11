@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- OAuth: the consent redirect is no longer blocked by FreeScout's Content-Security-Policy.
+  The app layout emits `form-action 'self'`, and browsers enforce `form-action` across
+  redirects, so approving consent returned a correct 302 that the browser then refused to
+  follow. The authorization code was never delivered and the consent page appeared to do
+  nothing. The validated redirect origin is now registered on FreeScout's `csp.form_action`
+  filter. Affected every browser-based MCP client.
+- OAuth: CIMD client metadata is no longer unreachable on IPv4-only hosts. `CURLOPT_RESOLVE`
+  entries are keyed by `host:port`, so emitting one entry per DNS answer made the AAAA record
+  replace the A record rather than adding a fallback. All addresses are now passed in a single
+  comma-separated entry.
+
 ## 1.0.0 — 2026-09-01
 
 First stable release.
