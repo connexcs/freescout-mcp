@@ -119,17 +119,22 @@ final class FreeScoutMutationRepository implements MutationRepository
     public function sendReply(int $ticketId, string $body, array $cc, array $bcc, ?string $status): array
     {
         $conversation = $this->authorizedConversation($ticketId);
+        $user = $this->user();
         if ('' === trim((string) $conversation->customer_email) || null === $conversation->customer) {
             throw new ToolCallException('Ticket has no reply recipient.');
         }
 
         $statusId = $this->statusId($status) ?? Conversation::STATUS_PENDING;
+        if ((int) $conversation->status !== $statusId) {
+            $conversation->changeStatus($statusId, $user);
+            $conversation->refresh();
+        }
+
         $now = date('Y-m-d H:i:s');
         $conversation->last_reply_at = $now;
         $conversation->last_reply_from = Conversation::PERSON_USER;
         $conversation->user_updated_at = $now;
-        $conversation->status = $statusId;
-        $conversation->updateFolder();
+        $conversation->setPreview($this->plainTextHtml($body));
         $conversation->save();
 
         $thread = new Thread();
@@ -139,9 +144,9 @@ final class FreeScoutMutationRepository implements MutationRepository
         $thread->source_type = Thread::SOURCE_TYPE_WEB;
         $thread->state = Thread::STATE_PUBLISHED;
         $thread->customer_id = $conversation->customer_id;
-        $thread->user_id = $conversation->user_id;
+        $thread->user_id = $user->id;
         $thread->status = $statusId;
-        $thread->created_by_user_id = $this->user()->id;
+        $thread->created_by_user_id = $user->id;
         $thread->body = $this->plainTextHtml($body);
         $thread->setTo($conversation->customer_email);
         $thread->setCc($cc);
@@ -171,7 +176,9 @@ final class FreeScoutMutationRepository implements MutationRepository
 
         $customer = null;
         if (null !== $customerId) {
-            $customer = Customer::find($customerId);
+            $customer = Customer::query()->with('emails')->where('id', $customerId)->whereHas('conversations', function ($conversations) {
+                $this->applyConversationAuthorization($conversations);
+            })->first();
             if (null === $customer) {
                 throw new ToolCallException('Customer not found.');
             }
@@ -225,7 +232,7 @@ final class FreeScoutMutationRepository implements MutationRepository
         $thread->state = Thread::STATE_PUBLISHED;
         $thread->first = true;
         $thread->customer_id = $customer->id;
-        $thread->user_id = $conversation->user_id;
+        $thread->user_id = $this->user()->id;
         $thread->status = $statusId;
         $thread->created_by_user_id = $this->user()->id;
         $thread->body = $this->plainTextHtml($body);
@@ -270,8 +277,6 @@ final class FreeScoutMutationRepository implements MutationRepository
         }
         $normalized = array_values($normalized);
 
-        // MCP tag assignment deliberately cannot create global tags. Creation has broader
-        // Tags-module authorization semantics than updating one conversation.
         $tagIds = [];
         foreach ($normalized as $name) {
             $existing = \DB::table('tags')->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->first();
@@ -331,6 +336,17 @@ final class FreeScoutMutationRepository implements MutationRepository
         }
 
         return $conversation;
+    }
+
+    private function applyConversationAuthorization($query): void
+    {
+        $user = $this->user();
+        $query->whereIn('mailbox_id', array_map('intval', $user->mailboxesIdsCanView()));
+        if (!$user->isAdmin() && $user->canSeeOnlyAssignedConversations()) {
+            $query->where(function ($assigned) use ($user) {
+                $assigned->where('user_id', $user->id)->orWhere('created_by_user_id', $user->id);
+            });
+        }
     }
 
     /** @return object */
