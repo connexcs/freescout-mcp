@@ -135,6 +135,8 @@ final class FreeScoutReadRepository implements ReadRepository
 
         $hasMore = $visible->count() > $limit;
         $rows = $visible->take($limit);
+        // The public cursor is deliberately the last returned tag, not the last scanned
+        // candidate: the over-fetched visible tag must remain eligible for the next page.
         return ['items' => $rows->map(function ($tag) { return $this->serializeTag($tag); })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
 
@@ -147,7 +149,7 @@ final class FreeScoutReadRepository implements ReadRepository
 
     private function serializeTag($tag): array
     {
-        return ['id' => (int) $tag->id, 'name' => (string) $tag->name, 'color' => isset($tag->color) ? (int) $tag->color : null];
+        return ['id' => (int) $tag->id, 'name' => (string) $tag->name, 'color' => isset($tag->color) ? (string) $tag->color : null];
     }
 
     private function tagsForTickets(array $ticketIds): array
