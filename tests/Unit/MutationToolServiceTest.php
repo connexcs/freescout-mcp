@@ -51,7 +51,8 @@ final class MutationToolServiceTest extends TestCase
             'idempotency_key' => 'send-key-0002',
         ]);
 
-        self::assertTrue($result['sent']);
+        self::assertFalse($result['sent']);
+        self::assertSame('scheduled', $result['delivery_state']);
         self::assertSame('send', $repository->calls[0][0]);
         self::assertSame('copy@example.test', $repository->calls[0][3][0]);
         self::assertTrue($runner->executions[0]['safeMeta']['externally_visible']);
