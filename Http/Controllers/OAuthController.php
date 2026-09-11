@@ -91,6 +91,21 @@ final class OAuthController extends Controller
                 'created_at' => time(),
             ]);
 
+            // FreeScout's app layout emits a CSP meta tag containing
+            // "form-action 'self'", and browsers enforce form-action across
+            // redirects. Without this the consent POST succeeds and returns its
+            // 302, but the browser refuses to follow the cross-origin redirect
+            // back to the client, so the authorization code is never delivered
+            // and the page appears to do nothing. assertExactRedirect() has
+            // already validated this redirect URI against the client metadata,
+            // so allowing its origin here is safe.
+            $redirectOrigin = $this->redirectOrigin($redirectUri);
+            if ('' !== $redirectOrigin) {
+                \Eventy::addFilter('csp.form_action', function ($value) use ($redirectOrigin) {
+                    return trim(((string) $value).' '.$redirectOrigin);
+                });
+            }
+
             return view('mcpserver::oauth.consent', [
                 'handle' => $handle,
                 'clientName' => $client->client_name,
@@ -102,6 +117,20 @@ final class OAuthController extends Controller
         } catch (OAuthException $exception) {
             return $this->browserError($exception);
         }
+    }
+
+    private function redirectOrigin($redirectUri)
+    {
+        $parts = parse_url((string) $redirectUri);
+        if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return '';
+        }
+        $origin = strtolower($parts['scheme']).'://'.strtolower($parts['host']);
+        if (!empty($parts['port'])) {
+            $origin .= ':'.((int) $parts['port']);
+        }
+
+        return $origin;
     }
 
     public function decide(Request $request)
