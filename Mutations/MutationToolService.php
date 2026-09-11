@@ -87,7 +87,7 @@ final class MutationToolService
             $cc = $this->emails($arguments, 'cc');
             $bcc = $this->emails($arguments, 'bcc');
             $status = isset($arguments['status']) ? $this->customerVisibleStatus($arguments['status']) : null;
-            return $this->executor->execute($tool, 'ticket', $id, $key, $arguments, ['body_length' => mb_strlen($body), 'cc_count' => count($cc), 'bcc_count' => count($bcc), 'status' => $status, 'externally_visible' => true], function () use ($id, $body, $cc, $bcc, $status) {
+            return $this->executor->execute($tool, 'ticket', $id, $key, $arguments, ['body_length' => mb_strlen($body), 'cc_count' => count($cc), 'bcc_count' => count($bcc), 'status' => $status, 'externally_visible' => true, 'confirm_send' => true], function () use ($id, $body, $cc, $bcc, $status) {
                 return $this->repository->sendReply($id, $body, $cc, $bcc, $status);
             });
         });
@@ -98,7 +98,7 @@ final class MutationToolService
         $tool = 'freescout_create_ticket';
         return $this->validated($tool, $arguments, function () use ($tool, $arguments) {
             if (($arguments['confirm_send'] ?? null) !== true) {
-                throw new ToolCallException('confirm_send must be true because creating a ticket sends the initial message.');
+                throw new ToolCallException('confirm_send must be true because creating a ticket schedules the initial customer-visible message for delivery.');
             }
             $mailboxId = $this->id($arguments, 'mailbox_id');
             $subject = $this->shortString($arguments, 'subject', 998);
@@ -118,7 +118,7 @@ final class MutationToolService
                 $assignee = (int) $assignee;
             }
             $status = isset($arguments['status']) ? $this->customerVisibleStatus($arguments['status']) : null;
-            return $this->executor->execute($tool, 'mailbox', $mailboxId, $key, $arguments, ['body_length' => mb_strlen($body), 'subject_length' => mb_strlen($subject), 'has_customer_id' => null !== $customerId, 'has_customer_email' => null !== $customerEmail, 'assignee_id' => $assignee, 'status' => $status, 'externally_visible' => true], function () use ($mailboxId, $subject, $customerId, $customerEmail, $body, $assignee, $status) {
+            return $this->executor->execute($tool, 'mailbox', $mailboxId, $key, $arguments, ['body_length' => mb_strlen($body), 'subject_length' => mb_strlen($subject), 'has_customer_id' => null !== $customerId, 'has_customer_email' => null !== $customerEmail, 'assignee_id' => $assignee, 'status' => $status, 'externally_visible' => true, 'confirm_send' => true], function () use ($mailboxId, $subject, $customerId, $customerEmail, $body, $assignee, $status) {
                 return $this->repository->createTicket($mailboxId, $subject, $customerId, $customerEmail, $body, $assignee, $status);
             });
         }, 'mailbox_id', 'mailbox');
