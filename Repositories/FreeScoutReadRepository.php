@@ -102,7 +102,7 @@ final class FreeScoutReadRepository implements ReadRepository
 
     public function ticketTags(int $ticketId): array
     {
-        if (!$this->tagsAvailable()) { return []; }
+        if (!$this->tagsAvailable()) { throw new ToolCallException('Tags module is unavailable.'); }
         $conversation = $this->conversationQuery()->where('conversations.id', $ticketId)->first();
         if (null === $conversation || !$this->user()->can('view', $conversation)) { throw new ToolCallException('Ticket not found.'); }
         $map = $this->tagsForTickets([$ticketId]);
@@ -112,15 +112,29 @@ final class FreeScoutReadRepository implements ReadRepository
     public function tags(string $query, int $limit, ?string $cursor): array
     {
         if (!$this->tagsAvailable()) { throw new ToolCallException('Tags module is unavailable.'); }
-        $builder = $this->tagSelect(DB::table('tags'));
-        if ('' !== $query) { $builder->whereRaw('LOWER(tags.name) LIKE ?', ['%'.mb_strtolower($query).'%']); }
-        try { $cursorId = PageCursor::decode($cursor); } catch (\InvalidArgumentException $exception) { throw new ToolCallException($exception->getMessage()); }
-        if (null !== $cursorId) { $builder->where('tags.id', '<', $cursorId); }
+        try { $scanBefore = PageCursor::decode($cursor); } catch (\InvalidArgumentException $exception) { throw new ToolCallException($exception->getMessage()); }
 
-        // Fetch extra candidates, then apply the same final conversation policy check used by ticket reads.
-        $candidates = $builder->orderBy('tags.id', 'desc')->limit(($limit + 1) * 5)->get();
-        $rows = $candidates->filter(function ($tag) { return $this->tagHasVisibleConversation((int) $tag->id); })->values()->take($limit + 1);
-        $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
+        $visible = collect();
+        $chunkSize = max(100, ($limit + 1) * 2);
+        do {
+            $builder = $this->tagSelect(DB::table('tags'));
+            if ('' !== $query) { $builder->whereRaw('LOWER(tags.name) LIKE ?', ['%'.mb_strtolower($query).'%']); }
+            if (null !== $scanBefore) { $builder->where('tags.id', '<', $scanBefore); }
+            $candidates = $builder->orderBy('tags.id', 'desc')->limit($chunkSize)->get();
+            if ($candidates->isEmpty()) { break; }
+
+            $scanBefore = (int) $candidates->last()->id;
+            $visibleIds = $this->visibleTagIds($candidates->pluck('id')->map(function ($id) { return (int) $id; })->all());
+            foreach ($candidates as $tag) {
+                if (isset($visibleIds[(int) $tag->id])) {
+                    $visible->push($tag);
+                    if ($visible->count() >= $limit + 1) { break 2; }
+                }
+            }
+        } while ($candidates->count() === $chunkSize);
+
+        $hasMore = $visible->count() > $limit;
+        $rows = $visible->take($limit);
         return ['items' => $rows->map(function ($tag) { return $this->serializeTag($tag); })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
 
@@ -153,15 +167,20 @@ final class FreeScoutReadRepository implements ReadRepository
         return $map;
     }
 
-    private function tagHasVisibleConversation(int $tagId): bool
+    private function visibleTagIds(array $tagIds): array
     {
-        $candidates = $this->conversationQuery()->whereExists(function ($sub) use ($tagId) {
-            $sub->select(DB::raw(1))->from('conversation_tag')->whereColumn('conversation_tag.conversation_id', 'conversations.id')->where('conversation_tag.tag_id', $tagId);
-        })->limit(100)->get();
-        foreach ($candidates as $conversation) {
-            if ($this->user()->can('view', $conversation)) { return true; }
+        if (!$tagIds) { return []; }
+        $conversations = $this->conversationQuery()
+            ->join('conversation_tag', 'conversation_tag.conversation_id', '=', 'conversations.id')
+            ->whereIn('conversation_tag.tag_id', $tagIds)
+            ->get(['conversations.*', 'conversation_tag.tag_id as mcp_tag_id']);
+        $visible = [];
+        foreach ($conversations as $conversation) {
+            if ($this->user()->can('view', $conversation)) {
+                $visible[(int) $conversation->mcp_tag_id] = true;
+            }
         }
-        return false;
+        return $visible;
     }
 
     private function conversationQuery() { $query = Conversation::query(); $this->applyConversationAuthorization($query); return $query; }
