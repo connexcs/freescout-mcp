@@ -29,13 +29,13 @@ final class FakeMutationRepository implements MutationRepository
     public function sendReply(int $ticketId, string $body, array $cc, array $bcc, ?string $status): array
     {
         $this->calls[] = ['send', $ticketId, $body, $cc, $bcc, $status];
-        return ['ticket_id' => $ticketId, 'thread_id' => 12, 'state' => 'published', 'sent' => true, 'status' => $status ?? 'pending'];
+        return ['ticket_id' => $ticketId, 'thread_id' => 12, 'state' => 'published', 'sent' => false, 'delivery_state' => 'scheduled', 'status' => $status ?? 'pending'];
     }
 
     public function createTicket(int $mailboxId, string $subject, ?int $customerId, ?string $customerEmail, string $body, ?int $assigneeId, ?string $status): array
     {
         $this->calls[] = ['create', $mailboxId, $subject, $customerId, $customerEmail, $body, $assigneeId, $status];
-        return ['ticket_id' => 20, 'number' => 10020, 'thread_id' => 21, 'created' => true, 'sent' => true, 'status' => $status ?? 'pending'];
+        return ['ticket_id' => 20, 'number' => 10020, 'thread_id' => 21, 'created' => true, 'sent' => false, 'delivery_state' => 'scheduled', 'status' => $status ?? 'pending'];
     }
 
     public function tagsAvailable(): bool
