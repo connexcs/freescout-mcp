@@ -136,6 +136,7 @@ final class FreeScoutMutationRepository implements MutationRepository
 
         $statusId = $this->statusId($status) ?? Conversation::STATUS_PENDING;
         $prevStatus = (int) $conversation->status;
+        $wasClosed = $conversation->isClosed();
         $statusChanged = $prevStatus !== $statusId;
         $now = date('Y-m-d H:i:s');
 
@@ -143,6 +144,9 @@ final class FreeScoutMutationRepository implements MutationRepository
         if ($statusChanged && $conversation->isClosed()) {
             $conversation->closed_by_user_id = $user->id;
             $conversation->closed_at = $now;
+        } elseif ($statusChanged && $wasClosed) {
+            $conversation->closed_by_user_id = null;
+            $conversation->closed_at = null;
         }
         $conversation->state = Conversation::STATE_PUBLISHED;
         $conversation->setCc($cc);
@@ -150,6 +154,7 @@ final class FreeScoutMutationRepository implements MutationRepository
         $conversation->last_reply_at = $now;
         $conversation->last_reply_from = Conversation::PERSON_USER;
         $conversation->user_updated_at = $now;
+        $conversation->setPreview($this->plainTextHtml($body));
         $conversation->updateFolder();
         $conversation->save();
 
@@ -213,6 +218,11 @@ final class FreeScoutMutationRepository implements MutationRepository
             $customer = Customer::getByEmail($customerEmail);
             if (null === $customer) {
                 $customer = Customer::create($customerEmail);
+            } else {
+                $customer = $this->authorizedCustomer((int) $customer->id);
+                if (null === $customer) {
+                    throw new ToolCallException('Customer not found.');
+                }
             }
         }
         if (!$customer || !$customerEmail) {
