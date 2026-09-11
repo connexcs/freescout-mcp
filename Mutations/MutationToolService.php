@@ -86,7 +86,7 @@ final class MutationToolService
             $key = $this->key($arguments);
             $cc = $this->emails($arguments, 'cc');
             $bcc = $this->emails($arguments, 'bcc');
-            $status = isset($arguments['status']) ? $this->status($arguments['status']) : null;
+            $status = isset($arguments['status']) ? $this->customerVisibleStatus($arguments['status']) : null;
             return $this->executor->execute($tool, 'ticket', $id, $key, $arguments, ['body_length' => mb_strlen($body), 'cc_count' => count($cc), 'bcc_count' => count($bcc), 'status' => $status, 'externally_visible' => true], function () use ($id, $body, $cc, $bcc, $status) {
                 return $this->repository->sendReply($id, $body, $cc, $bcc, $status);
             });
@@ -117,7 +117,7 @@ final class MutationToolService
                 }
                 $assignee = (int) $assignee;
             }
-            $status = isset($arguments['status']) ? $this->status($arguments['status']) : null;
+            $status = isset($arguments['status']) ? $this->customerVisibleStatus($arguments['status']) : null;
             return $this->executor->execute($tool, 'mailbox', $mailboxId, $key, $arguments, ['body_length' => mb_strlen($body), 'subject_length' => mb_strlen($subject), 'has_customer_id' => null !== $customerId, 'has_customer_email' => null !== $customerEmail, 'assignee_id' => $assignee, 'status' => $status, 'externally_visible' => true], function () use ($mailboxId, $subject, $customerId, $customerEmail, $body, $assignee, $status) {
                 return $this->repository->createTicket($mailboxId, $subject, $customerId, $customerEmail, $body, $assignee, $status);
             });
@@ -153,12 +153,14 @@ final class MutationToolService
         try {
             return $operation();
         } catch (ToolCallException $exception) {
-            if (!in_array($exception->getMessage(), [
+            $message = $exception->getMessage();
+            $executorOwned = in_array($message, [
                 'Ticket not found.', 'Mailbox not found.', 'Customer not found.', 'Customer email does not belong to customer.',
                 'Status already set.', 'Assignee already set.', 'Assignee is not available for this mailbox.',
                 'Ticket has no reply recipient.', 'Tags module is unavailable.',
                 'Idempotency key was already used with different arguments.', 'An operation with this idempotency key is still in progress.',
-            ], true)) {
+            ], true) || 0 === strpos($message, 'Unknown tag: ');
+            if (!$executorOwned) {
                 $target = filter_var($arguments[$targetField] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
                 $this->executor->validationFailure($tool, $targetType, false === $target ? null : (int) $target, is_string($arguments['idempotency_key'] ?? null) ? $arguments['idempotency_key'] : null, $this->validationMeta($arguments));
             }
@@ -201,6 +203,14 @@ final class MutationToolService
     private function status($value): string
     {
         if (!is_string($value) || !in_array($value, ['active', 'pending', 'closed', 'spam'], true)) {
+            throw new ToolCallException('Invalid status.');
+        }
+        return $value;
+    }
+
+    private function customerVisibleStatus($value): string
+    {
+        if (!is_string($value) || !in_array($value, ['active', 'pending', 'closed'], true)) {
             throw new ToolCallException('Invalid status.');
         }
         return $value;
