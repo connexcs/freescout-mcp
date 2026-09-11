@@ -17,9 +17,12 @@ final class ReadToolCatalogueTest extends TestCase
         $protocol = (new McpServerFactory([], new ReadToolCatalogue(new ReadToolService(new FakeReadRepository()))))->build();
         $body = $this->call($protocol, 'tools/list');
         $tools = $body['result']['tools'];
+        $names = array_column($tools, 'name');
 
-        self::assertCount(7, $tools);
+        self::assertCount(9, $tools);
         self::assertSame('freescout_get_ticket', $tools[0]['name']);
+        self::assertContains('freescout_get_ticket_tags', $names);
+        self::assertContains('freescout_search_tags', $names);
         foreach ($tools as $tool) {
             self::assertTrue($tool['annotations']['readOnlyHint']);
             self::assertFalse($tool['annotations']['destructiveHint']);
@@ -35,6 +38,17 @@ final class ReadToolCatalogueTest extends TestCase
         $body = $this->call($protocol, 'tools/call', ['name' => 'freescout_get_ticket', 'arguments' => ['ticket_id' => 7]]);
 
         self::assertSame(7, $body['result']['structuredContent']['ticket']['id']);
+        self::assertFalse($body['result']['isError']);
+    }
+
+    public function testReadsTagsForAccessibleTicket(): void
+    {
+        $repository = new FakeReadRepository();
+        $repository->tickets[7] = ['id' => 7, 'subject' => 'Allowed'];
+        $protocol = (new McpServerFactory([], new ReadToolCatalogue(new ReadToolService($repository))))->build();
+        $body = $this->call($protocol, 'tools/call', ['name' => 'freescout_get_ticket_tags', 'arguments' => ['ticket_id' => 7]]);
+
+        self::assertSame('priority', $body['result']['structuredContent']['tags'][0]['name']);
         self::assertFalse($body['result']['isError']);
     }
 

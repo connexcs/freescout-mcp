@@ -25,4 +25,29 @@ final class FakeMutationRepository implements MutationRepository
         $this->calls[] = ['draft', $ticketId, $body, $cc, $bcc];
         return ['ticket_id' => $ticketId, 'thread_id' => 11, 'sent' => false];
     }
+
+    public function sendReply(int $ticketId, string $body, array $cc, array $bcc, ?string $status): array
+    {
+        $this->calls[] = ['send', $ticketId, $body, $cc, $bcc, $status];
+        return ['ticket_id' => $ticketId, 'thread_id' => 12, 'state' => 'published', 'sent' => false, 'delivery_state' => 'scheduled', 'status' => $status ?? 'pending'];
+    }
+
+    public function createTicket(int $mailboxId, string $subject, ?int $customerId, ?string $customerEmail, string $body, ?int $assigneeId, ?string $status): array
+    {
+        $this->calls[] = ['create', $mailboxId, $subject, $customerId, $customerEmail, $body, $assigneeId, $status];
+        return ['ticket_id' => 20, 'number' => 10020, 'thread_id' => 21, 'created' => true, 'sent' => false, 'delivery_state' => 'scheduled', 'status' => $status ?? 'pending'];
+    }
+
+    public function tagsAvailable(): bool
+    {
+        return true;
+    }
+
+    public function setTicketTags(int $ticketId, array $tags): array
+    {
+        $this->calls[] = ['tags', $ticketId, $tags];
+        return ['ticket_id' => $ticketId, 'tags' => array_map(function ($name, $index) {
+            return ['id' => $index + 1, 'name' => $name];
+        }, $tags, array_keys($tags))];
+    }
 }

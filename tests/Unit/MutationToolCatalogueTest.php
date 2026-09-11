@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
 
 final class MutationToolCatalogueTest extends TestCase
 {
-    public function testMutationToolsAreExplicitlyAnnotatedAndDraftCannotSend(): void
+    public function testMutationToolsAreExplicitlyAnnotatedAndCustomerVisibleActionsRequireConfirmation(): void
     {
         $enabled = static fn () => true;
         $catalogue = new MutationToolCatalogue(
@@ -33,13 +33,28 @@ final class MutationToolCatalogueTest extends TestCase
             'Mcp-Method' => 'tools/list',
         ]);
         $tools = json_decode($result->toJson(), true, 512, JSON_THROW_ON_ERROR)['result']['tools'];
+        $byName = [];
+        foreach ($tools as $tool) {
+            $byName[$tool['name']] = $tool;
+        }
 
-        self::assertCount(3, $tools);
-        self::assertSame(['freescout_add_note', 'freescout_update_ticket', 'freescout_create_draft_reply'], array_column($tools, 'name'));
-        self::assertFalse($tools[0]['annotations']['readOnlyHint']);
-        self::assertTrue($tools[1]['annotations']['destructiveHint']);
-        self::assertStringContainsString('never send', $tools[2]['description']);
-        self::assertArrayNotHasKey('confirm_send', $tools[2]['inputSchema']['properties']);
+        self::assertSame([
+            'freescout_add_note',
+            'freescout_update_ticket',
+            'freescout_create_draft_reply',
+            'freescout_send_reply',
+            'freescout_create_ticket',
+            'freescout_set_ticket_tags',
+        ], array_column($tools, 'name'));
+        self::assertFalse($byName['freescout_add_note']['annotations']['readOnlyHint']);
+        self::assertTrue($byName['freescout_update_ticket']['annotations']['destructiveHint']);
+        self::assertStringContainsString('never send', $byName['freescout_create_draft_reply']['description']);
+        self::assertArrayNotHasKey('confirm_send', $byName['freescout_create_draft_reply']['inputSchema']['properties']);
+        self::assertSame(true, $byName['freescout_send_reply']['inputSchema']['properties']['confirm_send']['const']);
+        self::assertContains('confirm_send', $byName['freescout_send_reply']['inputSchema']['required']);
+        self::assertSame(true, $byName['freescout_create_ticket']['inputSchema']['properties']['confirm_send']['const']);
+        self::assertContains('confirm_send', $byName['freescout_create_ticket']['inputSchema']['required']);
+        self::assertTrue($byName['freescout_set_ticket_tags']['annotations']['destructiveHint']);
     }
 
     public function testReadOnlyOAuthScopeHidesMutationCatalogue(): void
