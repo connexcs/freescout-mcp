@@ -60,18 +60,18 @@ final class MutationToolCatalogue
             ], 'required' => ['ticket_id', 'body', 'idempotency_key'], 'additionalProperties' => false,
         ], false);
 
-        $this->add($builder, 'freescout_send_reply', 'Send reply', 'Send a customer-visible reply on an accessible ticket. confirm_send=true is mandatory on every call.', [$this->tools, 'sendReply'], [
+        $this->add($builder, 'freescout_send_reply', 'Send reply', 'Schedule a customer-visible reply on an accessible ticket. confirm_send=true is mandatory on every call.', [$this->tools, 'sendReply'], [
             'type' => 'object', 'properties' => [
                 'ticket_id' => ['type' => 'integer', 'minimum' => 1],
                 'body' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 100000, 'description' => 'Plain-text customer-visible reply.'],
                 'cc' => $this->emailList(), 'bcc' => $this->emailList(),
-                'status' => ['type' => 'string', 'enum' => ['active', 'pending', 'closed', 'spam']],
+                'status' => ['type' => 'string', 'enum' => ['active', 'pending', 'closed']],
                 'confirm_send' => ['type' => 'boolean', 'const' => true, 'description' => 'Explicit confirmation that this call may send email to the customer.'],
                 'idempotency_key' => $idempotency,
             ], 'required' => ['ticket_id', 'body', 'confirm_send', 'idempotency_key'], 'additionalProperties' => false,
         ], true, false);
 
-        $this->add($builder, 'freescout_create_ticket', 'Create ticket', 'Create a new email ticket and send its initial customer-visible message. confirm_send=true is mandatory.', [$this->tools, 'createTicket'], [
+        $this->add($builder, 'freescout_create_ticket', 'Create ticket', 'Create a new email ticket and schedule its initial customer-visible message. confirm_send=true is mandatory.', [$this->tools, 'createTicket'], [
             'type' => 'object', 'properties' => [
                 'mailbox_id' => ['type' => 'integer', 'minimum' => 1],
                 'subject' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 998],
@@ -79,7 +79,7 @@ final class MutationToolCatalogue
                 'customer_email' => ['type' => 'string', 'format' => 'email', 'maxLength' => 191],
                 'body' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 100000],
                 'assignee_id' => ['type' => 'integer', 'minimum' => -1, 'not' => ['const' => 0]],
-                'status' => ['type' => 'string', 'enum' => ['active', 'pending', 'closed', 'spam']],
+                'status' => ['type' => 'string', 'enum' => ['active', 'pending', 'closed']],
                 'confirm_send' => ['type' => 'boolean', 'const' => true],
                 'idempotency_key' => $idempotency,
             ], 'required' => ['mailbox_id', 'subject', 'body', 'confirm_send', 'idempotency_key'],
@@ -87,7 +87,7 @@ final class MutationToolCatalogue
         ], true, false);
 
         if ($this->tools->tagsAvailable()) {
-            $this->add($builder, 'freescout_set_ticket_tags', 'Set ticket tags', 'Replace the complete tag set on an accessible ticket. Unknown names are created when the Tags module permits it.', [$this->tools, 'setTicketTags'], [
+            $this->add($builder, 'freescout_set_ticket_tags', 'Set ticket tags', 'Replace the complete tag set on an accessible ticket using existing tag names only. Unknown names are rejected.', [$this->tools, 'setTicketTags'], [
                 'type' => 'object', 'properties' => [
                     'ticket_id' => ['type' => 'integer', 'minimum' => 1],
                     'tags' => ['type' => 'array', 'maxItems' => 50, 'items' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 191]],
