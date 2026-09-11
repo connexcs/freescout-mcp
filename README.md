@@ -125,13 +125,13 @@ Set `APP_URL` and, when needed, `MCP_SERVER_OAUTH_ISSUER` to the stable public H
 
 The authenticated catalogue includes ticket metadata, ticket context and published threads, ticket search, mailbox listing, customer search, and user search. Every query is constrained using the authenticated user's current FreeScout mailbox and assigned-ticket permissions before pagination. Inaccessible and missing ticket IDs produce the same result.
 
-When the official `knowledgebase` module is active and its compatible mailbox-scoped tables are present, four additional article/category search and read tools are registered. No Knowledge Base package is required by this module. See [the read-tool reference and security rules](docs/read-tools.md).
+When a compatible FreeScout Tags schema is available, ticket results include authorized tag metadata, ticket search can filter by exact tag name, and dedicated ticket-tag/tag-search tools are registered. Global tag counters are not exposed. When the official `knowledgebase` module is active and its compatible mailbox-scoped tables are present, four additional article/category search and read tools are registered. No Knowledge Base package is required by this module. See [the read-tool reference and security rules](docs/read-tools.md).
 
 ## Mutation tools
 
-Write tools are disabled by default and require both `MCP_SERVER_MUTATIONS_ENABLED=true` and the **Write tools** administrator setting. When enabled, users can add internal notes, update ticket status/assignment, and create unsent draft replies within their existing FreeScout permissions. Every call requires an idempotency key and produces a redacted audit record.
+Write tools are disabled by default and require both `MCP_SERVER_MUTATIONS_ENABLED=true` and the **Write tools** administrator setting. When enabled, users can add internal notes, update ticket status/assignment, create unsent draft replies, create new email tickets, schedule customer-visible replies, and replace a ticket's existing tags within their current FreeScout permissions. Every call requires an idempotency key and produces a redacted audit record.
 
-There is deliberately no send-reply tool. Creating a draft never sends mail or makes content customer-visible. See [the mutation-tool and audit reference](docs/mutation-tools.md).
+Customer-visible `freescout_send_reply` and `freescout_create_ticket` calls require explicit `confirm_send: true`. They create the published conversation/thread state and schedule FreeScout's normal undo/background delivery workflow; successful results report `delivery_state: scheduled` and `sent: false` rather than claiming downstream SMTP delivery has completed. Draft creation remains strictly non-sending. Tag assignment accepts existing global tag names only and does not create new tag definitions. See [the mutation-tool and audit reference](docs/mutation-tools.md).
 
 ## Packaging
 
