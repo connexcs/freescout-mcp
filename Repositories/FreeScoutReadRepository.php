@@ -24,7 +24,7 @@ final class FreeScoutReadRepository implements ReadRepository
     {
         $conversation = $this->conversationQuery()->with(['mailbox', 'customer.emails', 'user'])->where('conversations.id', $id)->first();
         if (null === $conversation || !$this->user()->can('view', $conversation)) { return null; }
-        return $this->serializeTicket($conversation);
+        return $this->serializeTicket($conversation, $this->tagsAvailable() ? $this->tagsForTickets([(int) $conversation->id])[(int) $conversation->id] ?? [] : []);
     }
 
     public function ticketThreads(int $id, int $limit, ?string $cursor): array
@@ -55,7 +55,8 @@ final class FreeScoutReadRepository implements ReadRepository
             if (false === $status) { throw new ToolCallException('Invalid status.'); }
             $builder->where('status', $status);
         }
-        if (isset($filters['tag']) && $this->tagsAvailable()) {
+        if (isset($filters['tag'])) {
+            if (!$this->tagsAvailable()) { throw new ToolCallException('Tags module is unavailable.'); }
             $tag = mb_strtolower($filters['tag']);
             $builder->whereExists(function ($sub) use ($tag) {
                 $sub->select(DB::raw(1))->from('conversation_tag')->join('tags', 'tags.id', '=', 'conversation_tag.tag_id')->whereColumn('conversation_tag.conversation_id', 'conversations.id')->whereRaw('LOWER(tags.name) = ?', [$tag]);
@@ -64,7 +65,8 @@ final class FreeScoutReadRepository implements ReadRepository
         $this->applyCursor($builder, $cursor);
         $rows = $builder->orderBy('conversations.id', 'desc')->limit(($limit + 1) * 5)->get()->filter(function ($conversation) { return $this->user()->can('view', $conversation); })->values()->take($limit + 1);
         $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
-        return ['items' => $rows->map(function ($conversation) { return $this->serializeTicket($conversation); })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
+        $tagMap = $this->tagsAvailable() ? $this->tagsForTickets($rows->pluck('id')->map(function ($id) { return (int) $id; })->all()) : [];
+        return ['items' => $rows->map(function ($conversation) use ($tagMap) { return $this->serializeTicket($conversation, $tagMap[(int) $conversation->id] ?? []); })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
 
     public function mailboxes(int $limit, ?string $cursor): array
@@ -101,21 +103,24 @@ final class FreeScoutReadRepository implements ReadRepository
     public function ticketTags(int $ticketId): array
     {
         if (!$this->tagsAvailable()) { return []; }
-        return $this->tagSelect(DB::table('tags')->join('conversation_tag', 'conversation_tag.tag_id', '=', 'tags.id')->where('conversation_tag.conversation_id', $ticketId))->orderBy('tags.name')->get()->map(function ($tag) { return $this->serializeTag($tag); })->all();
+        $conversation = $this->conversationQuery()->where('conversations.id', $ticketId)->first();
+        if (null === $conversation || !$this->user()->can('view', $conversation)) { throw new ToolCallException('Ticket not found.'); }
+        $map = $this->tagsForTickets([$ticketId]);
+        return $map[$ticketId] ?? [];
     }
 
     public function tags(string $query, int $limit, ?string $cursor): array
     {
         if (!$this->tagsAvailable()) { throw new ToolCallException('Tags module is unavailable.'); }
-        $builder = $this->tagSelect(DB::table('tags'))->whereExists(function ($sub) {
-            $sub->select(DB::raw(1))->from('conversation_tag')->join('conversations', 'conversations.id', '=', 'conversation_tag.conversation_id')->whereColumn('conversation_tag.tag_id', 'tags.id')->whereIn('conversations.mailbox_id', $this->mailboxIds());
-            $user = $this->user();
-            if (!$user->isAdmin() && $user->canSeeOnlyAssignedConversations()) { $sub->where(function ($assigned) use ($user) { $assigned->where('conversations.user_id', $user->id)->orWhere('conversations.created_by_user_id', $user->id); }); }
-        });
+        $builder = $this->tagSelect(DB::table('tags'));
         if ('' !== $query) { $builder->whereRaw('LOWER(tags.name) LIKE ?', ['%'.mb_strtolower($query).'%']); }
         try { $cursorId = PageCursor::decode($cursor); } catch (\InvalidArgumentException $exception) { throw new ToolCallException($exception->getMessage()); }
         if (null !== $cursorId) { $builder->where('tags.id', '<', $cursorId); }
-        $rows = $builder->orderBy('tags.id', 'desc')->limit($limit + 1)->get(); $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
+
+        // Fetch extra candidates, then apply the same final conversation policy check used by ticket reads.
+        $candidates = $builder->orderBy('tags.id', 'desc')->limit(($limit + 1) * 5)->get();
+        $rows = $candidates->filter(function ($tag) { return $this->tagHasVisibleConversation((int) $tag->id); })->values()->take($limit + 1);
+        $hasMore = $rows->count() > $limit; $rows = $rows->take($limit);
         return ['items' => $rows->map(function ($tag) { return $this->serializeTag($tag); })->values()->all(), 'next_cursor' => $hasMore && $rows->isNotEmpty() ? PageCursor::encode((int) $rows->last()->id) : null];
     }
 
@@ -123,13 +128,40 @@ final class FreeScoutReadRepository implements ReadRepository
     {
         $columns = ['tags.id', 'tags.name'];
         if (Schema::hasColumn('tags', 'color')) { $columns[] = 'tags.color'; }
-        if (Schema::hasColumn('tags', 'counter')) { $columns[] = 'tags.counter'; }
         return $query->select($columns);
     }
 
     private function serializeTag($tag): array
     {
-        return ['id' => (int) $tag->id, 'name' => (string) $tag->name, 'color' => isset($tag->color) ? (int) $tag->color : null, 'counter' => isset($tag->counter) ? (int) $tag->counter : null];
+        return ['id' => (int) $tag->id, 'name' => (string) $tag->name, 'color' => isset($tag->color) ? (int) $tag->color : null];
+    }
+
+    private function tagsForTickets(array $ticketIds): array
+    {
+        if (!$ticketIds || !$this->tagsAvailable()) { return []; }
+        $rows = $this->tagSelect(DB::table('tags')->join('conversation_tag', 'conversation_tag.tag_id', '=', 'tags.id'))
+            ->addSelect('conversation_tag.conversation_id')
+            ->whereIn('conversation_tag.conversation_id', $ticketIds)
+            ->orderBy('tags.name')
+            ->get();
+        $map = [];
+        foreach ($rows as $tag) {
+            $ticketId = (int) $tag->conversation_id;
+            if (!isset($map[$ticketId])) { $map[$ticketId] = []; }
+            $map[$ticketId][] = $this->serializeTag($tag);
+        }
+        return $map;
+    }
+
+    private function tagHasVisibleConversation(int $tagId): bool
+    {
+        $candidates = $this->conversationQuery()->whereExists(function ($sub) use ($tagId) {
+            $sub->select(DB::raw(1))->from('conversation_tag')->whereColumn('conversation_tag.conversation_id', 'conversations.id')->where('conversation_tag.tag_id', $tagId);
+        })->limit(100)->get();
+        foreach ($candidates as $conversation) {
+            if ($this->user()->can('view', $conversation)) { return true; }
+        }
+        return false;
     }
 
     private function conversationQuery() { $query = Conversation::query(); $this->applyConversationAuthorization($query); return $query; }
@@ -146,13 +178,13 @@ final class FreeScoutReadRepository implements ReadRepository
     }
     private function user() { $user = $this->context->user(); if (null === $user) { throw new \LogicException('MCP read attempted without an authenticated user.'); } return $user; }
 
-    private function serializeTicket($conversation): array
+    private function serializeTicket($conversation, array $tags = []): array
     {
         return ['id' => (int) $conversation->id, 'number' => (int) $conversation->number, 'subject' => (string) $conversation->subject, 'status' => $conversation->getStatusName(), 'type' => $conversation->getTypeName(),
             'mailbox' => $conversation->mailbox ? ['id' => (int) $conversation->mailbox->id, 'name' => (string) $conversation->mailbox->name] : null,
             'customer' => $conversation->customer ? ['id' => (int) $conversation->customer->id, 'name' => trim((string) $conversation->customer->getFullName()), 'email' => (string) $conversation->customer_email] : null,
             'assignee' => $conversation->user ? ['id' => (int) $conversation->user->id, 'name' => trim((string) $conversation->user->getFullName())] : null,
-            'tags' => $this->ticketTags((int) $conversation->id), 'preview' => (string) $conversation->preview, 'thread_count' => (int) $conversation->threads_count, 'has_attachments' => (bool) $conversation->has_attachments,
+            'tags' => $tags, 'preview' => (string) $conversation->preview, 'thread_count' => (int) $conversation->threads_count, 'has_attachments' => (bool) $conversation->has_attachments,
             'created_at' => $this->date($conversation->created_at), 'updated_at' => $this->date($conversation->updated_at), 'last_reply_at' => $this->date($conversation->last_reply_at)];
     }
 
