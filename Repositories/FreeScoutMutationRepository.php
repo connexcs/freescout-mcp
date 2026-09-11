@@ -120,21 +120,37 @@ final class FreeScoutMutationRepository implements MutationRepository
     {
         $conversation = $this->authorizedConversation($ticketId);
         $user = $this->user();
-        if ('' === trim((string) $conversation->customer_email) || null === $conversation->customer) {
+        if ('' === trim((string) $conversation->customer_email)) {
             throw new ToolCallException('Ticket has no reply recipient.');
         }
 
-        $statusId = $this->statusId($status) ?? Conversation::STATUS_PENDING;
-        if ((int) $conversation->status !== $statusId) {
-            $conversation->changeStatus($statusId, $user);
-            $conversation->refresh();
+        $customer = $conversation->customer;
+        if (null === $customer) {
+            $customer = Customer::getByEmail($conversation->customer_email);
+            if (null === $customer) {
+                $customer = Customer::create($conversation->customer_email);
+            }
+            $conversation->customer_id = $customer->id;
+            $conversation->setRelation('customer', $customer);
         }
 
+        $statusId = $this->statusId($status) ?? Conversation::STATUS_PENDING;
+        $prevStatus = (int) $conversation->status;
+        $statusChanged = $prevStatus !== $statusId;
         $now = date('Y-m-d H:i:s');
+
+        $conversation->status = $statusId;
+        if ($statusChanged && $conversation->isClosed()) {
+            $conversation->closed_by_user_id = $user->id;
+            $conversation->closed_at = $now;
+        }
+        $conversation->state = Conversation::STATE_PUBLISHED;
+        $conversation->setCc($cc);
+        $conversation->setBcc($bcc);
         $conversation->last_reply_at = $now;
         $conversation->last_reply_from = Conversation::PERSON_USER;
         $conversation->user_updated_at = $now;
-        $conversation->setPreview($this->plainTextHtml($body));
+        $conversation->updateFolder();
         $conversation->save();
 
         $thread = new Thread();
@@ -143,8 +159,8 @@ final class FreeScoutMutationRepository implements MutationRepository
         $thread->source_via = Thread::PERSON_USER;
         $thread->source_type = Thread::SOURCE_TYPE_WEB;
         $thread->state = Thread::STATE_PUBLISHED;
-        $thread->customer_id = $conversation->customer_id;
-        $thread->user_id = $user->id;
+        $thread->customer_id = $customer->id;
+        $thread->user_id = $conversation->user_id;
         $thread->status = $statusId;
         $thread->created_by_user_id = $user->id;
         $thread->body = $this->plainTextHtml($body);
@@ -152,6 +168,12 @@ final class FreeScoutMutationRepository implements MutationRepository
         $thread->setCc($cc);
         $thread->setBcc($bcc);
         $thread->save();
+
+        $this->fireSendReplySaveHook($conversation, $body, $cc, $bcc, $statusId, false);
+        if ($statusChanged) {
+            event(new \App\Events\ConversationStatusChanged($conversation));
+            \Eventy::action('conversation.status_changed', $conversation, $user, true, $prevStatus);
+        }
 
         $conversation->mailbox->updateFoldersCounters();
         $this->scheduleCustomerVisibleDelivery($conversation, $thread, false);
@@ -176,9 +198,7 @@ final class FreeScoutMutationRepository implements MutationRepository
 
         $customer = null;
         if (null !== $customerId) {
-            $customer = Customer::query()->with('emails')->where('id', $customerId)->whereHas('conversations', function ($conversations) {
-                $this->applyConversationAuthorization($conversations);
-            })->first();
+            $customer = $this->authorizedCustomer($customerId);
             if (null === $customer) {
                 throw new ToolCallException('Customer not found.');
             }
@@ -213,6 +233,10 @@ final class FreeScoutMutationRepository implements MutationRepository
         $conversation->customer_email = $customerEmail;
         $conversation->user_id = (null === $assigneeId || -1 === $assigneeId) ? null : $assigneeId;
         $conversation->status = $statusId;
+        if (Conversation::STATUS_CLOSED === $statusId) {
+            $conversation->closed_by_user_id = $this->user()->id;
+            $conversation->closed_at = $now;
+        }
         $conversation->state = Conversation::STATE_PUBLISHED;
         $conversation->source_via = Conversation::PERSON_USER;
         $conversation->source_type = Conversation::SOURCE_TYPE_WEB;
@@ -232,13 +256,14 @@ final class FreeScoutMutationRepository implements MutationRepository
         $thread->state = Thread::STATE_PUBLISHED;
         $thread->first = true;
         $thread->customer_id = $customer->id;
-        $thread->user_id = $this->user()->id;
+        $thread->user_id = $conversation->user_id;
         $thread->status = $statusId;
         $thread->created_by_user_id = $this->user()->id;
         $thread->body = $this->plainTextHtml($body);
         $thread->setTo($customerEmail);
         $thread->save();
 
+        $this->fireSendReplySaveHook($conversation, $body, [], [], $statusId, true);
         $conversation->mailbox->updateFoldersCounters();
         $this->scheduleCustomerVisibleDelivery($conversation, $thread, true);
         $conversation->refresh();
@@ -280,7 +305,7 @@ final class FreeScoutMutationRepository implements MutationRepository
         $tagIds = [];
         foreach ($normalized as $name) {
             $existing = \DB::table('tags')->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->first();
-            if (!$existing) {
+            if (!$existing || !$this->tagVisibleToUser((int) $existing->id)) {
                 throw new ToolCallException('Unknown tag: '.$name.'.');
             }
             $tagIds[] = (int) $existing->id;
@@ -325,6 +350,56 @@ final class FreeScoutMutationRepository implements MutationRepository
         event(new \App\Events\UserReplied($conversation, $thread));
         \Eventy::action('conversation.user_replied_can_undo', $conversation, $thread);
         \Helper::backgroundAction('conversation.user_replied', [$conversation, $thread], now()->addSeconds(Conversation::UNDO_TIMOUT));
+    }
+
+    private function fireSendReplySaveHook($conversation, string $body, array $cc, array $bcc, int $statusId, bool $isCreate): void
+    {
+        $request = \Illuminate\Http\Request::create('/mcp', 'POST', [
+            'body' => $body,
+            'cc' => $cc,
+            'bcc' => $bcc,
+            'status' => $statusId,
+            'type' => Conversation::TYPE_EMAIL,
+            'is_create' => $isCreate ? 1 : 0,
+        ]);
+        \Eventy::action('conversation.send_reply_save', $conversation, $request);
+    }
+
+    /** @return object|null */
+    private function authorizedCustomer(int $customerId)
+    {
+        $customer = Customer::with('emails')->find($customerId);
+        if (null === $customer) {
+            return null;
+        }
+
+        $query = Conversation::query()->where('customer_id', $customerId);
+        $this->applyConversationAuthorization($query);
+        foreach ($query->get() as $conversation) {
+            if ($this->user()->can('view', $conversation)) {
+                return $customer;
+            }
+        }
+
+        return null;
+    }
+
+    private function tagVisibleToUser(int $tagId): bool
+    {
+        $query = Conversation::query()->whereExists(function ($sub) use ($tagId) {
+            $sub->select(\DB::raw(1))
+                ->from('conversation_tag')
+                ->whereColumn('conversation_tag.conversation_id', 'conversations.id')
+                ->where('conversation_tag.tag_id', $tagId);
+        });
+        $this->applyConversationAuthorization($query);
+        foreach ($query->get() as $conversation) {
+            if ($this->user()->can('view', $conversation)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @return object */
