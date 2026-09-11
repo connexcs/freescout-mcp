@@ -123,32 +123,41 @@ final class FreeScoutMutationRepository implements MutationRepository
             throw new ToolCallException('Ticket has no reply recipient.');
         }
 
-        $statusId = $this->statusId($status);
-        $thread = Thread::createExtended([
-            'type' => Thread::TYPE_MESSAGE,
-            'body' => $this->plainTextHtml($body),
-            'created_by_user_id' => $this->user()->id,
-            'user_id' => $conversation->user_id,
-            'cc' => $cc,
-            'bcc' => $bcc,
-            'status' => $statusId,
-        ], $conversation, $conversation->customer, true);
+        $statusId = $this->statusId($status) ?? Conversation::STATUS_PENDING;
+        $now = date('Y-m-d H:i:s');
+        $conversation->last_reply_at = $now;
+        $conversation->last_reply_from = Conversation::PERSON_USER;
+        $conversation->user_updated_at = $now;
+        $conversation->status = $statusId;
+        $conversation->updateFolder();
+        $conversation->save();
 
-        if (!$thread) {
-            throw new \RuntimeException('FreeScout did not create the reply thread.');
-        }
-
-        // createExtended uses the customer's main email. Preserve the conversation's
-        // selected reply address, which may intentionally differ from that main address.
+        $thread = new Thread();
+        $thread->conversation_id = $conversation->id;
+        $thread->type = Thread::TYPE_MESSAGE;
+        $thread->source_via = Thread::PERSON_USER;
+        $thread->source_type = Thread::SOURCE_TYPE_WEB;
+        $thread->state = Thread::STATE_PUBLISHED;
+        $thread->customer_id = $conversation->customer_id;
+        $thread->user_id = $conversation->user_id;
+        $thread->status = $statusId;
+        $thread->created_by_user_id = $this->user()->id;
+        $thread->body = $this->plainTextHtml($body);
         $thread->setTo($conversation->customer_email);
+        $thread->setCc($cc);
+        $thread->setBcc($bcc);
         $thread->save();
+
+        $conversation->mailbox->updateFoldersCounters();
+        $this->scheduleCustomerVisibleDelivery($conversation, $thread, false);
         $conversation->refresh();
 
         return [
             'ticket_id' => (int) $conversation->id,
             'thread_id' => (int) $thread->id,
             'state' => 'published',
-            'sent' => true,
+            'sent' => false,
+            'delivery_state' => 'scheduled',
             'status' => Conversation::$statuses[(int) $conversation->status] ?? (string) $conversation->status,
         ];
     }
@@ -188,6 +197,7 @@ final class FreeScoutMutationRepository implements MutationRepository
         }
 
         $statusId = $this->statusId($status) ?? Conversation::STATUS_PENDING;
+        $now = date('Y-m-d H:i:s');
         $conversation = new Conversation();
         $conversation->type = Conversation::TYPE_EMAIL;
         $conversation->subject = $subject;
@@ -200,22 +210,30 @@ final class FreeScoutMutationRepository implements MutationRepository
         $conversation->source_via = Conversation::PERSON_USER;
         $conversation->source_type = Conversation::SOURCE_TYPE_WEB;
         $conversation->created_by_user_id = $this->user()->id;
+        $conversation->last_reply_at = $now;
+        $conversation->last_reply_from = Conversation::PERSON_USER;
+        $conversation->user_updated_at = $now;
         $conversation->setPreview($this->plainTextHtml($body));
         $conversation->updateFolder();
         $conversation->save();
 
-        $thread = Thread::createExtended([
-            'type' => Thread::TYPE_MESSAGE,
-            'body' => $this->plainTextHtml($body),
-            'created_by_user_id' => $this->user()->id,
-            'user_id' => $conversation->user_id,
-            'status' => $statusId,
-        ], $conversation, $customer, true);
-        if (!$thread) {
-            throw new \RuntimeException('FreeScout did not create the initial ticket thread.');
-        }
+        $thread = new Thread();
+        $thread->conversation_id = $conversation->id;
+        $thread->type = Thread::TYPE_MESSAGE;
+        $thread->source_via = Thread::PERSON_USER;
+        $thread->source_type = Thread::SOURCE_TYPE_WEB;
+        $thread->state = Thread::STATE_PUBLISHED;
+        $thread->first = true;
+        $thread->customer_id = $customer->id;
+        $thread->user_id = $conversation->user_id;
+        $thread->status = $statusId;
+        $thread->created_by_user_id = $this->user()->id;
+        $thread->body = $this->plainTextHtml($body);
         $thread->setTo($customerEmail);
         $thread->save();
+
+        $conversation->mailbox->updateFoldersCounters();
+        $this->scheduleCustomerVisibleDelivery($conversation, $thread, true);
         $conversation->refresh();
 
         return [
@@ -223,7 +241,8 @@ final class FreeScoutMutationRepository implements MutationRepository
             'number' => (int) $conversation->number,
             'thread_id' => (int) $thread->id,
             'created' => true,
-            'sent' => true,
+            'sent' => false,
+            'delivery_state' => 'scheduled',
             'status' => Conversation::$statuses[(int) $conversation->status] ?? (string) $conversation->status,
         ];
     }
@@ -251,27 +270,15 @@ final class FreeScoutMutationRepository implements MutationRepository
         }
         $normalized = array_values($normalized);
 
+        // MCP tag assignment deliberately cannot create global tags. Creation has broader
+        // Tags-module authorization semantics than updating one conversation.
         $tagIds = [];
         foreach ($normalized as $name) {
             $existing = \DB::table('tags')->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->first();
-            if ($existing) {
-                $tagIds[] = (int) $existing->id;
-                continue;
+            if (!$existing) {
+                throw new ToolCallException('Unknown tag: '.$name.'.');
             }
-            $values = ['name' => $name];
-            if (\Schema::hasColumn('tags', 'counter')) {
-                $values['counter'] = 0;
-            }
-            if (\Schema::hasColumn('tags', 'color')) {
-                $values['color'] = 1;
-            }
-            if (\Schema::hasColumn('tags', 'created_at')) {
-                $values['created_at'] = date('Y-m-d H:i:s');
-            }
-            if (\Schema::hasColumn('tags', 'updated_at')) {
-                $values['updated_at'] = date('Y-m-d H:i:s');
-            }
-            $tagIds[] = (int) \DB::table('tags')->insertGetId($values);
+            $tagIds[] = (int) $existing->id;
         }
 
         $current = \DB::table('conversation_tag')->where('conversation_id', $conversation->id)->pluck('tag_id')->map(function ($id) { return (int) $id; })->all();
@@ -299,6 +306,20 @@ final class FreeScoutMutationRepository implements MutationRepository
                 return ['id' => (int) $tag->id, 'name' => (string) $tag->name];
             })->all(),
         ];
+    }
+
+    private function scheduleCustomerVisibleDelivery($conversation, $thread, bool $created): void
+    {
+        if ($created) {
+            event(new \App\Events\UserCreatedConversation($conversation, $thread));
+            \Eventy::action('conversation.created_by_user_can_undo', $conversation, $thread);
+            \Helper::backgroundAction('conversation.created_by_user', [$conversation, $thread], now()->addSeconds(Conversation::UNDO_TIMOUT));
+            return;
+        }
+
+        event(new \App\Events\UserReplied($conversation, $thread));
+        \Eventy::action('conversation.user_replied_can_undo', $conversation, $thread);
+        \Helper::backgroundAction('conversation.user_replied', [$conversation, $thread], now()->addSeconds(Conversation::UNDO_TIMOUT));
     }
 
     /** @return object */
